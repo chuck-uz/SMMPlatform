@@ -1,15 +1,10 @@
-export function SectionStub({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) {
+export function SectionStub({ description }: { description: string }) {
   return (
-    <div className="max-w-2xl">
-      <h1 className="font-semibold text-2xl text-foreground">{title}</h1>
-      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{description}</p>
-      <div className="mt-6 rounded-lg border border-dashed border-border bg-card p-6 text-sm text-muted-foreground">
+    <div className="p-6 sm:p-8 sm:px-10">
+      <p className="max-w-[640px] text-[14.5px] leading-relaxed text-muted-foreground">
+        {description}
+      </p>
+      <div className="mt-6 max-w-[1020px] rounded-[14px] border border-dashed border-border bg-card p-6 text-sm text-subtle">
         Раздел в разработке.
       </div>
     </div>
