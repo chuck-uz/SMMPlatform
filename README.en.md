@@ -1,0 +1,51 @@
+# SMM Platform
+
+**A single platform for promoting a travel agency on Instagram and the web — with an AI agent, analytics, and lead capture.**
+
+[Русская версия](README.md)
+
+## Why
+
+A travel agency's channels are scattered — Instagram, DMs, comments, the website, messengers — all handled by hand, in different places. SMM Platform brings this into one panel: connect Instagram through the official Meta login, and the platform keeps the connection alive, answers clients by scenario, and surfaces what to do next — based on real data, not guesswork.
+
+Two core points: **(1)** consultation and lead capture, **(2)** promotion and account growth. Everything else serves those two goals.
+
+## Features
+
+- **Admin panel** — email/password login, roles (admin/manager), creating and deactivating users, self-service password change.
+- **Instagram connection** — official OAuth login (Instagram API with Instagram Login, no raw account password ever handled); the access token is stored encrypted (AES-256-GCM) and renews itself before it expires, with no manual step; status and remaining validity are shown in the panel, with a warning when access is about to expire; disconnecting an account is one click.
+- **API security** — rate limiting on every internal API route (a stricter limit specifically on the panel login, against password guessing); a webhook-signature-verification utility is already in place ahead of the future Instagram webhook integration.
+- **Uptime monitoring** — an automated check every 10 minutes, with an email alert on downtime.
+
+The full roadmap (Instagram analytics, an AI agent for DMs and comments, lead intake and tracking, content publishing, the agency's own website) lives on the interactive roadmap site: **[roadmap-platform.oresh.in](https://roadmap-platform.oresh.in)**.
+
+## Stack
+
+Next.js (App Router) + TypeScript + Prisma/PostgreSQL + NextAuth, deployed on DockHost. Details in [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## Run locally
+
+```sh
+cd app
+cp .env.example .env   # fill in the values
+docker compose up
+```
+
+The app comes up at `http://localhost:3001` (Postgres on `5433`).
+
+## Production
+
+**[smm.oresh.in](https://smm.oresh.in)**
+
+## For developers
+
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** — stack, code layout, key decisions.
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — how to build, run, add a feature, and deploy; project conventions; working with the Obsidian vault (context, roadmap, decision log).
+
+## Security
+
+Secrets live only in `.env` (never in code or commits). Instagram access tokens are encrypted before being stored. A separate Claude API key is used for this project with a spend cap. See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+
+## Status
+
+Actively in development (MVP stage). The first customer is a travel agency; once that vertical is fully built out, the platform is meant to generalize further.
