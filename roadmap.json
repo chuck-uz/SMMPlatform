@@ -105,9 +105,7 @@
         "F1"
       ],
       "review": false,
-      "status": "done",
-      "note": "Next.js/TS/Tailwind, NextAuth (Credentials) + Prisma/Postgres, локально в Docker Desktop (без гита, без F1)",
-      "updatedAt": "2026-07-13",
+      "status": "todo",
       "subtasks": [
         "авторизация",
         "макет и навигация",
