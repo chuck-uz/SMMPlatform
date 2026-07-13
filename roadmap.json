@@ -126,7 +126,9 @@
         "F1"
       ],
       "review": false,
-      "status": "todo",
+      "status": "done",
+      "note": "verifyWebhookSignature (HMAC/X-Hub-Signature-256) и encrypt/decrypt (AES-256-GCM) — переиспользуемые утилиты для IG-трека (webhook/токены ещё не существуют); in-memory rate limiter в proxy.ts: 100/мин глобально на /api/*, 10/мин на login",
+      "updatedAt": "2026-07-13",
       "subtasks": [
         "защита ключей и доступов",
         "проверка подлинности входящих событий",
