@@ -10,4 +10,4 @@ if [ -n "${ADMIN_EMAIL:-}" ] && [ -n "${ADMIN_PASSWORD:-}" ]; then
 fi
 
 echo "[entrypoint] starting Next.js..."
-exec pnpm start
+exec node server.js
