@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ExclamationTriangleIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
 import { prisma } from "@/lib/prisma";
 import { daysUntilExpiry } from "@/lib/instagramOAuth";
+import { DisconnectInstagramButton } from "@/components/DisconnectInstagramButton";
 
 const ERROR_MESSAGES: Record<string, string> = {
   oauth_state: "Не удалось подтвердить запрос авторизации — попробуйте подключить аккаунт заново.",
@@ -61,20 +62,23 @@ export default async function ConnectionsPage({
                       {days >= 0 ? `Доступ действует ещё ${days} дн.` : "Срок доступа истёк"}
                     </p>
                   </div>
-                  <span
-                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-sm px-3 py-1 text-xs font-semibold ${
-                      isExpiringSoon
-                        ? "bg-warning/10 text-warning"
-                        : "bg-accent/10 text-accent"
-                    }`}
-                  >
-                    {isExpiringSoon ? (
-                      <ExclamationTriangleIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                    ) : (
-                      <CheckCircleIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                    )}
-                    {isExpiringSoon ? "Скоро истекает" : "Подключено"}
-                  </span>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-sm px-3 py-1 text-xs font-semibold ${
+                        isExpiringSoon
+                          ? "bg-warning/10 text-warning"
+                          : "bg-accent/10 text-accent"
+                      }`}
+                    >
+                      {isExpiringSoon ? (
+                        <ExclamationTriangleIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                      ) : (
+                        <CheckCircleIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                      )}
+                      {isExpiringSoon ? "Скоро истекает" : "Подключено"}
+                    </span>
+                    <DisconnectInstagramButton accountId={account.id} />
+                  </div>
                 </li>
               );
             })}
