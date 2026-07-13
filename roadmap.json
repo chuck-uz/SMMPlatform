@@ -87,7 +87,9 @@
       "difficulty": 2,
       "deps": [],
       "review": false,
-      "status": "todo",
+      "status": "done",
+      "note": "Деплой на DockHost (Docker), Postgres, HTTPS через smm.oresh.in, миграции/сид при рестарте контейнера; мониторинг доступности — scheduled GitHub Actions пинг + email от GitHub при падении",
+      "updatedAt": "2026-07-13",
       "subtasks": [
         "постоянно работающий сервер с публичным защищённым адресом",
         "файловое хранилище данных",

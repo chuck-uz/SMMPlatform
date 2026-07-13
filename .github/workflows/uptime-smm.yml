@@ -1,0 +1,19 @@
+name: Uptime check — smm.oresh.in
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check https://smm.oresh.in
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 https://smm.oresh.in/)
+          echo "HTTP status: $code"
+          if [ "$code" -lt 200 ] || [ "$code" -ge 400 ]; then
+            echo "Site is down or returning an error (status $code)"
+            exit 1
+          fi
