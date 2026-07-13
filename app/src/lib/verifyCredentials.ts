@@ -13,6 +13,7 @@ export type UserRecord = {
   passwordHash: string;
   name: string | null;
   role: string;
+  isActive: boolean;
 };
 
 export async function verifyCredentials(
@@ -25,7 +26,7 @@ export async function verifyCredentials(
   }
 
   const user = await findUser(email);
-  if (!user) return null;
+  if (!user || !user.isActive) return null;
 
   const isValid = await bcrypt.compare(password, user.passwordHash);
   if (!isValid) return null;

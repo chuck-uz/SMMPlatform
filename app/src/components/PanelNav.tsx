@@ -8,9 +8,11 @@ import {
   InboxIcon,
   ChartBarIcon,
   PhotoIcon,
+  UsersIcon,
+  UserCircleIcon,
 } from "@heroicons/react/24/outline";
 
-const NAV_ITEMS = [
+const MODULE_NAV_ITEMS = [
   { href: "/panel/connections", label: "Подключения", icon: LinkIcon },
   { href: "/panel/scenarios", label: "Сценарии", icon: ChatBubbleLeftRightIcon },
   { href: "/panel/inbox", label: "Инбокс", icon: InboxIcon },
@@ -18,12 +20,27 @@ const NAV_ITEMS = [
   { href: "/panel/content", label: "Контент", icon: PhotoIcon },
 ];
 
-export function PanelNav({ direction = "vertical" }: { direction?: "vertical" | "horizontal" }) {
+const ADMIN_NAV_ITEM = { href: "/panel/users", label: "Пользователи", icon: UsersIcon };
+const PROFILE_NAV_ITEM = { href: "/panel/profile", label: "Профиль", icon: UserCircleIcon };
+
+export function PanelNav({
+  direction = "vertical",
+  isAdmin = false,
+}: {
+  direction?: "vertical" | "horizontal";
+  isAdmin?: boolean;
+}) {
   const pathname = usePathname();
+
+  const items = [
+    ...MODULE_NAV_ITEMS,
+    ...(isAdmin ? [ADMIN_NAV_ITEM] : []),
+    PROFILE_NAV_ITEM,
+  ];
 
   return (
     <div className={direction === "vertical" ? "flex flex-col gap-1" : "flex gap-1"}>
-      {NAV_ITEMS.map((item) => {
+      {items.map((item) => {
         const isActive = pathname === item.href;
         const Icon = item.icon;
         return (

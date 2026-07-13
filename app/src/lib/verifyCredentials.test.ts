@@ -11,6 +11,7 @@ async function makeUser(overrides: Partial<UserRecord> = {}): Promise<UserRecord
     passwordHash: await bcrypt.hash(PLAIN_PASSWORD, 10),
     name: null,
     role: "admin",
+    isActive: true,
     ...overrides,
   };
 }
@@ -43,6 +44,15 @@ describe("verifyCredentials", () => {
     const findUser = async () => null;
 
     const result = await verifyCredentials("nobody@example.com", PLAIN_PASSWORD, findUser);
+
+    expect(result).toBeNull();
+  });
+
+  it("returns null when the user is deactivated, even with the correct password", async () => {
+    const user = await makeUser({ isActive: false });
+    const findUser = async (email: string) => (email === user.email ? user : null);
+
+    const result = await verifyCredentials(user.email, PLAIN_PASSWORD, findUser);
 
     expect(result).toBeNull();
   });

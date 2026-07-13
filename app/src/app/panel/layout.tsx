@@ -29,7 +29,7 @@ export default async function PanelLayout({
         </div>
 
         <div className="flex-1 overflow-y-auto p-3">
-          <PanelNav />
+          <PanelNav isAdmin={session.user.role === "admin"} />
         </div>
 
         <div className="border-t border-border p-3">
@@ -55,7 +55,7 @@ export default async function PanelLayout({
           aria-label="Разделы панели (мобильная версия)"
           className="overflow-x-auto border-b border-border bg-card px-3 py-2 md:hidden"
         >
-          <PanelNav direction="horizontal" />
+          <PanelNav direction="horizontal" isAdmin={session.user.role === "admin"} />
         </nav>
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
