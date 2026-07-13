@@ -4,3 +4,4 @@ mnt/
 .env
 CLAUDE.md
 MASTER-CONTEXT.md
+dockhost.yaml
