@@ -887,7 +887,7 @@
       "deps": [
         "AG1"
       ],
-      "review": true,
+      "review": false,
       "status": "todo",
       "subtasks": [
         "оценка доступности API",
