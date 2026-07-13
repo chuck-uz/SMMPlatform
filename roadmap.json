@@ -164,7 +164,9 @@
         "IG1"
       ],
       "review": false,
-      "status": "todo",
+      "status": "done",
+      "note": "OAuth (Instagram API with Instagram Login, Трек A scopes), InstagramAccount модель (несколько аккаунтов), токен шифруется (F3), авто-продление — in-process таймер, /panel/connections со статусом и предупреждением при <7 дней",
+      "updatedAt": "2026-07-13",
       "subtasks": [
         "кнопка с официальным входом Meta",
         "сохранение доступа",
