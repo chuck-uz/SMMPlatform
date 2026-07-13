@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { ExclamationTriangleIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
+import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { daysUntilExpiry } from "@/lib/instagramOAuth";
 import { DisconnectInstagramButton } from "@/components/DisconnectInstagramButton";
+import { ClaudeApiKeyForm } from "@/components/ClaudeApiKeyForm";
 
 const ERROR_MESSAGES: Record<string, string> = {
   oauth_state: "Не удалось подтвердить запрос авторизации — попробуйте подключить аккаунт заново.",
@@ -18,6 +20,12 @@ export default async function ConnectionsPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
+  const session = await auth();
+  const isAdmin = session?.user?.role === "admin";
+
+  const claudeConfig = isAdmin
+    ? await prisma.claudeApiKeyConfig.findUnique({ where: { singleton: "claude" } })
+    : null;
 
   const accounts = await prisma.instagramAccount.findMany({
     orderBy: { createdAt: "asc" },
@@ -40,7 +48,8 @@ export default async function ConnectionsPage({
         </div>
       )}
 
-      <div className="mt-6 overflow-hidden rounded-lg border border-border bg-card">
+      <h2 className="mt-8 font-semibold text-sm text-foreground">Instagram</h2>
+      <div className="mt-3 overflow-hidden rounded-lg border border-border bg-card">
         {accounts.length === 0 ? (
           <div className="p-6 text-sm text-muted-foreground">
             Пока нет подключённых аккаунтов Instagram.
@@ -88,10 +97,23 @@ export default async function ConnectionsPage({
 
       <Link
         href="/api/instagram/authorize"
-        className="mt-6 inline-flex items-center justify-center rounded-sm bg-accent px-4 py-2.5 text-sm font-semibold text-accent-foreground transition-colors duration-200 hover:bg-accent/90"
+        className="mt-4 inline-flex items-center justify-center rounded-sm bg-accent px-4 py-2.5 text-sm font-semibold text-accent-foreground transition-colors duration-200 hover:bg-accent/90"
       >
         Подключить Instagram
       </Link>
+
+      {isAdmin && (
+        <>
+          <h2 className="mt-8 font-semibold text-sm text-foreground">Claude API</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Ключ используется для аналитики, контент-плана и автоответов. Хранится
+            зашифрованным, доступен только администратору.
+          </p>
+          <div className="mt-3 rounded-lg border border-border bg-card p-4">
+            <ClaudeApiKeyForm hasKey={!!claudeConfig} verified={claudeConfig?.verified ?? false} />
+          </div>
+        </>
+      )}
     </div>
   );
 }

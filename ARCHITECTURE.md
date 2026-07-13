@@ -74,18 +74,24 @@ All application code lives in `app/src`.
 | `lib/verifyWebhookSignature.ts` | HMAC-SHA256 signature verification (`sha256=<hex>`, matching Meta's `X-Hub-Signature-256`). Built ahead of any real webhook endpoint, for the future Instagram Direct/Track B work. |
 | `lib/rateLimiter.ts` | In-memory, fixed-window rate limiter (`Map`-based, per process). Not shared across replicas — revisit if `smm` ever scales beyond one. |
 | `lib/verifyCredentials.ts`, `changePassword.ts`, `createUser.ts`, `setUserActive.ts` | Panel auth/user-management business logic, each paired with a `.test.ts`. |
+| `lib/claudeApiKey.ts` | Pure, dependency-injected logic for saving the platform's Claude API key: verifies it against the real API, then encrypts it. The verification client is injected (`ClaudeApiClient`), so this is unit-tested without a real key or network call. |
+| `lib/claudeApiClient.ts` | The real `ClaudeApiClient` implementation — calls Anthropic's `GET /v1/models` (cheap, no token cost) to check the key is valid. Not unit-tested, same boundary treatment as `instagramApiClient.ts`. |
 | `lib/prisma.ts` | Prisma client singleton, constructed with the `@prisma/adapter-pg` driver adapter. |
 | `components/*` | Client components for panel interactivity (forms, toggles, nav) — thin, calling server actions via `useTransition`. |
 
 ## 4. Data model
 
-Two Prisma models so far (`app/prisma/schema.prisma`):
+Three Prisma models so far (`app/prisma/schema.prisma`):
 
 - **`User`** — panel accounts (`email`, `passwordHash`, `role`, `isActive`).
 - **`InstagramAccount`** — one row per connected Instagram account
   (`instagramUserId`, `username`, `accessToken` — encrypted, `tokenExpiresAt`,
   `connectedByUserId`). Designed for **multiple** accounts from the start, even
   though the first customer only needs one.
+- **`ClaudeApiKeyConfig`** — a singleton row (`singleton: "claude"`) holding
+  the platform's own Claude API key, encrypted, plus `verified`/`verifiedAt`.
+  Global rather than per-user: the key powers server-side AI features (analytics,
+  content, auto-replies), not a per-account external login like Instagram.
 
 ## 5. Key decisions
 

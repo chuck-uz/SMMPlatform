@@ -40,3 +40,15 @@ model InstagramAccount {
 
   @@map("instagram_accounts")
 }
+
+model ClaudeApiKeyConfig {
+  id              String    @id @default(cuid())
+  singleton       String    @unique @default("claude")
+  encryptedApiKey String
+  verified        Boolean   @default(false)
+  verifiedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("claude_api_key_config")
+}
