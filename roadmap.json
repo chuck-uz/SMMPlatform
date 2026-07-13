@@ -146,7 +146,9 @@
         "F2"
       ],
       "review": false,
-      "status": "todo",
+      "status": "done",
+      "note": "Ключ вводится админом в /panel/connections, хранится зашифрованным (AES-256-GCM), проверяется реальным запросом к Anthropic API (GET /v1/models), статус виден в панели",
+      "updatedAt": "2026-07-13",
       "subtasks": [
         "поле ввода API-ключа в /panel/connections",
         "шифрование ключа при хранении",
