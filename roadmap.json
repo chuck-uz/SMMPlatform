@@ -16,7 +16,7 @@
     "Контент": "постинг/контент",
     "Сайт": "сайт турагентства",
     "Реклама": "Marketing API (поздняя фаза)",
-    "Развитие": "новые каналы"
+    "Backlog": "на потом — изучим после MVP и остального плана"
   },
   "milestones": {
     "MVP": [
@@ -72,7 +72,7 @@
       "AD7",
       "AD8"
     ],
-    "Развитие": [
+    "Backlog": [
       "FUT1",
       "FUT2",
       "FUT3",
@@ -833,7 +833,7 @@
     },
     {
       "id": "FUT1",
-      "track": "Развитие",
+      "track": "Backlog",
       "title": "Telegram",
       "difficulty": 3,
       "deps": [
@@ -849,7 +849,7 @@
     },
     {
       "id": "FUT2",
-      "track": "Развитие",
+      "track": "Backlog",
       "title": "Messenger",
       "difficulty": 3,
       "deps": [
@@ -865,7 +865,7 @@
     },
     {
       "id": "FUT3",
-      "track": "Развитие",
+      "track": "Backlog",
       "title": "WhatsApp Business",
       "difficulty": 4,
       "deps": [
@@ -881,7 +881,7 @@
     },
     {
       "id": "FUT4",
-      "track": "Развитие",
+      "track": "Backlog",
       "title": "TikTok и другие",
       "difficulty": 4,
       "deps": [
