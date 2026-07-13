@@ -6,10 +6,12 @@ import { instagramApiClient } from "@/lib/instagramApiClient";
 import { encrypt } from "@/lib/encryption";
 import { prisma } from "@/lib/prisma";
 
+const PUBLIC_URL = process.env.NEXTAUTH_URL;
+
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
-    return NextResponse.redirect(new URL("/login", req.url));
+    return NextResponse.redirect(new URL("/login", PUBLIC_URL ?? req.url));
   }
 
   const code = req.nextUrl.searchParams.get("code");
@@ -17,7 +19,7 @@ export async function GET(req: NextRequest) {
   const expectedState = req.cookies.get("ig_oauth_state")?.value;
 
   if (!code || !state || !expectedState || state !== expectedState) {
-    return NextResponse.redirect(new URL("/panel/connections?error=oauth_state", req.url));
+    return NextResponse.redirect(new URL("/panel/connections?error=oauth_state", PUBLIC_URL ?? req.url));
   }
 
   const appId = process.env.IG_APP_ID;
@@ -25,7 +27,7 @@ export async function GET(req: NextRequest) {
   const redirectUri = process.env.IG_REDIRECT_URI;
   const encryptionKey = process.env.ENCRYPTION_KEY;
   if (!appId || !appSecret || !redirectUri || !encryptionKey) {
-    return NextResponse.redirect(new URL("/panel/connections?error=not_configured", req.url));
+    return NextResponse.redirect(new URL("/panel/connections?error=not_configured", PUBLIC_URL ?? req.url));
   }
 
   try {
@@ -52,10 +54,10 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch {
-    return NextResponse.redirect(new URL("/panel/connections?error=connect_failed", req.url));
+    return NextResponse.redirect(new URL("/panel/connections?error=connect_failed", PUBLIC_URL ?? req.url));
   }
 
-  const response = NextResponse.redirect(new URL("/panel/connections", req.url));
+  const response = NextResponse.redirect(new URL("/panel/connections", PUBLIC_URL ?? req.url));
   response.cookies.delete("ig_oauth_state");
   return response;
 }
