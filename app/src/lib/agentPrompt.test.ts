@@ -7,6 +7,12 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("Не называй финальные цены");
   });
 
+  it("always includes lead-collection instructions", () => {
+    const prompt = buildSystemPrompt({ toneAndRules: "", knowledgeDocuments: [], exampleDialogues: [] });
+    expect(prompt).toContain("собирай заявку клиента");
+    expect(prompt).toContain("Никогда не выдумывай значение поля");
+  });
+
   it("includes tone and rules text", () => {
     const prompt = buildSystemPrompt({
       toneAndRules: "Дружелюбно, на 'вы', с эмодзи в меру.",

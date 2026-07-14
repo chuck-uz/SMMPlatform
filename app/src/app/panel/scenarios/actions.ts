@@ -5,9 +5,10 @@ import type { Prisma } from "@/generated/prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/encryption";
-import { replyAsAgent } from "@/lib/agentClient";
+import { respondAndExtractLead } from "@/lib/agentClient";
 import { buildConversationMessages, buildSystemPrompt } from "@/lib/agentPrompt";
 import { buildExampleDialogueTurns, canSaveAsExample, type SandboxTurn } from "@/lib/agentSandbox";
+import { isLeadComplete } from "@/lib/leadFields";
 
 async function requireAdmin() {
   const session = await auth();
@@ -101,22 +102,28 @@ export async function sendSandboxMessageAction(params: { sessionId: string | nul
 
   const systemPrompt = await buildCurrentSystemPrompt();
   const conversationMessages = buildConversationMessages(turnsWithClientMessage);
-  const agentReply = await replyAsAgent(apiKey, systemPrompt, conversationMessages);
+  const { reply, fields } = await respondAndExtractLead(apiKey, systemPrompt, conversationMessages);
 
   const updatedTurns: SandboxTurn[] = [
     ...turnsWithClientMessage,
-    { role: "agent", content: agentReply, rating: null },
+    { role: "agent", content: reply, rating: null },
   ];
 
   const saved = await prisma.agentSandboxSession.upsert({
     where: { id: params.sessionId ?? "" },
-    create: { turns: updatedTurns as unknown as Prisma.InputJsonValue },
-    update: { turns: updatedTurns as unknown as Prisma.InputJsonValue },
+    create: {
+      turns: updatedTurns as unknown as Prisma.InputJsonValue,
+      leadFields: fields as unknown as Prisma.InputJsonValue,
+    },
+    update: {
+      turns: updatedTurns as unknown as Prisma.InputJsonValue,
+      leadFields: fields as unknown as Prisma.InputJsonValue,
+    },
   });
 
   revalidatePath("/panel/scenarios");
 
-  return { sessionId: saved.id, turns: updatedTurns };
+  return { sessionId: saved.id, turns: updatedTurns, leadFields: fields, isComplete: isLeadComplete(fields) };
 }
 
 export async function rateSandboxTurnAction(params: {

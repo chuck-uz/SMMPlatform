@@ -22,6 +22,12 @@ const CORE_RULES =
   "Ты — менеджер турагентства, общаешься с клиентом от его имени. Отвечай на языке, на котором пишет клиент. " +
   "Не называй финальные цены и не закрывай сделку — этим занимается менеджер после консультации.";
 
+const LEAD_COLLECTION_RULES =
+  "По ходу разговора собирай заявку клиента: направление, количество человек, даты поездки (можно примерные), " +
+  "ориентир по бюджету (необязательно), контакт для связи, пожелания (необязательно). " +
+  "Уточняй недостающее по одному вопросу за раз, естественно — не устраивай допрос из всех полей сразу. " +
+  "Никогда не выдумывай значение поля, которое клиент не называл явно — если неизвестно, оставляй пустым.";
+
 function formatExampleDialogue(dialogue: ExampleDialogue, index: number): string {
   const lines = dialogue.turns.map(
     (turn) => `${turn.role === "client" ? "Клиент" : "Агент"}: ${turn.content}`,
@@ -30,7 +36,7 @@ function formatExampleDialogue(dialogue: ExampleDialogue, index: number): string
 }
 
 export function buildSystemPrompt(input: AgentPromptInput): string {
-  const sections: string[] = [CORE_RULES];
+  const sections: string[] = [CORE_RULES, LEAD_COLLECTION_RULES];
 
   sections.push(`Тон и правила:\n${input.toneAndRules.trim() || "(не заданы)"}`);
 
