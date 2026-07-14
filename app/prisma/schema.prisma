@@ -116,3 +116,40 @@ model ClaudeApiKeyConfig {
 
   @@map("claude_api_key_config")
 }
+
+model AgentConfig {
+  id           String   @id @default(cuid())
+  singleton    String   @unique @default("agent")
+  toneAndRules String   @default("")
+  updatedAt    DateTime @updatedAt
+
+  @@map("agent_config")
+}
+
+model AgentKnowledgeDocument {
+  id        String   @id @default(cuid())
+  title     String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("agent_knowledge_documents")
+}
+
+model AgentExampleDialogue {
+  id        String   @id @default(cuid())
+  turns     Json
+  createdAt DateTime @default(now())
+
+  @@map("agent_example_dialogues")
+}
+
+model AgentSandboxSession {
+  id        String   @id @default(cuid())
+  turns     Json
+  status    String   @default("draft")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("agent_sandbox_sessions")
+}
