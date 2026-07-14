@@ -12,7 +12,10 @@ const MEDIA_METRICS: Record<string, string> = {
 
 async function fetchJson(url: URL) {
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Instagram content API request failed: ${res.status} ${url.pathname}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Instagram content API request failed: ${res.status} ${url.pathname} ${body}`);
+  }
   return res.json();
 }
 
