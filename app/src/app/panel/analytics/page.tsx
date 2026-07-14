@@ -6,17 +6,23 @@ import {
   parseAgeGenderBreakdown,
   parseGeographyBreakdown,
 } from "@/lib/analyticsDashboard";
+import { resolvePeriodRange, buildPeriodSummary, type PeriodPreset } from "@/lib/analyticsSummary";
 import { AccountSelector } from "@/components/AccountSelector";
 import { AnalyticsCharts } from "@/components/AnalyticsCharts";
 import { MediaTable } from "@/components/MediaTable";
 import { DemographicsBlock } from "@/components/DemographicsBlock";
+import { PeriodSelector } from "@/components/PeriodSelector";
+import { SummaryPanel } from "@/components/SummaryPanel";
+
+const VALID_PRESETS: PeriodPreset[] = ["7d", "30d", "90d", "custom"];
 
 export default async function AnalyticsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ account?: string }>;
+  searchParams: Promise<{ account?: string; period?: string; from?: string; to?: string }>;
 }) {
-  const { account: accountParam } = await searchParams;
+  const { account: accountParam, period, from: fromParam, to: toParam } = await searchParams;
+  const preset: PeriodPreset = VALID_PRESETS.includes(period as PeriodPreset) ? (period as PeriodPreset) : "7d";
 
   const accounts = await prisma.instagramAccount.findMany({
     orderBy: { createdAt: "asc" },
@@ -100,6 +106,17 @@ export default async function AnalyticsPage({
   const ageGender = parseAgeGenderBreakdown(demographicsMetrics?.ageGender ?? []);
   const countries = parseGeographyBreakdown(demographicsMetrics?.geography ?? []);
 
+  const range = resolvePeriodRange({ preset, from: fromParam, to: toParam }, new Date());
+  const currentPoints = dailyPoints.filter((point) => {
+    const date = new Date(point.date);
+    return date >= range.from && date <= range.to;
+  });
+  const previousPoints = dailyPoints.filter((point) => {
+    const date = new Date(point.date);
+    return date >= range.previousFrom && date <= range.previousTo;
+  });
+  const summary = buildPeriodSummary({ range, currentPoints, previousPoints, media, latestMetricsByMediaId });
+
   return (
     <div className="p-6 sm:p-8 sm:px-10">
       <div className="flex flex-col items-start gap-4 sm:flex-row sm:flex-wrap sm:justify-between">
@@ -123,6 +140,18 @@ export default async function AnalyticsPage({
       <h2 className="mt-9 text-[13.5px] font-semibold text-foreground">Демография аудитории</h2>
       <div className="mt-3 max-w-[1020px]">
         <DemographicsBlock followerCount={followerCount} ageGender={ageGender} countries={countries} />
+      </div>
+
+      <h2 className="mt-9 text-[13.5px] font-semibold text-foreground">Сводка за период</h2>
+      <p className="mt-1 max-w-[640px] text-[12.5px] leading-relaxed text-muted-foreground">
+        Ключевые метрики с изменением к прошлому периоду, лучшие/худшие публикации, паттерны
+        времени и аномалии — данные для будущего AI-разбора (AN4).
+      </p>
+      <div className="mt-3">
+        <PeriodSelector accountId={selectedAccount.id} preset={preset} from={fromParam} to={toParam} />
+      </div>
+      <div className="mt-4">
+        <SummaryPanel summary={summary} />
       </div>
     </div>
   );
