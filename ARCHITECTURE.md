@@ -68,7 +68,7 @@ All application code lives in `app/src`.
 | `app/api/auth/[...nextauth]/route.ts` | NextAuth's own route handlers. |
 | `app/api/instagram/authorize/route.ts` | Redirects to Instagram's OAuth authorize URL (Track A scopes only), sets a CSRF `state` cookie. |
 | `app/api/instagram/callback/route.ts` | Validates `state`, exchanges the code for a long-lived token via `instagramOAuth.ts`, stores it encrypted. |
-| `app/panel/*` | Server-rendered panel pages: `connections`, `users` (admin-only), `profile`, `analytics` (multi-account charts/table/demographics), `scenarios` (admin-only AI agent core: tone, knowledge base, examples, sandbox), plus stubs for modules not yet built (`inbox`, `content`). Each mutable page pairs with an `actions.ts` (server actions). |
+| `app/panel/*` | Server-rendered panel pages: `connections`, `users` (admin-only), `profile`, `analytics` (multi-account charts/table/demographics), `scenarios` (admin-only AI agent core: tone, knowledge base, examples, sandbox), `leads` (admin+manager: status-filtered list of collected `Lead` records, "take into work"/"close" transitions), plus a stub for the module not yet built (`inbox`, now scoped to dialogue history only — lead cards moved to `leads`). Each mutable page pairs with an `actions.ts` (server actions). |
 | `lib/instagramOAuth.ts` | Pure, dependency-injected OAuth orchestration: `buildAuthorizeUrl`, `connectInstagramAccount`, `refreshAccountToken`, `daysUntilExpiry`. The real Instagram API calls are injected as an `InstagramApiClient`, so this is fully unit-tested without hitting the network. |
 | `lib/instagramApiClient.ts` | The real `InstagramApiClient` implementation (`fetch` calls to `api.instagram.com` / `graph.instagram.com`). Not unit-tested — same boundary treatment as `prisma.ts`. |
 | `lib/encryption.ts` | AES-256-GCM `encrypt`/`decrypt`, key passed as a parameter (never read from `process.env` inside the function) — used to store the Instagram access token. |
@@ -85,7 +85,12 @@ All application code lives in `app/src`.
 | `lib/claudeAnalysisClient.ts` | The real call to `claude-sonnet-5` (`POST /v1/messages` via `fetch`, matching `claudeApiClient.ts`'s boundary treatment) with `output_config.format` (JSON Schema: `summary`/`observations`/`recommendations`) and an anti-hallucination system prompt. Not unit-tested. |
 | `lib/agentPrompt.ts` | Pure functions for the AI agent core (AG1): `buildSystemPrompt` (assembles tone/rules + knowledge base documents + example dialogues into one system prompt; the no-prices/no-closing-deals rule is always baked in, not admin-editable), `buildConversationMessages` (dialogue turns → Claude's `user`/`assistant` message array). Fully unit-tested. |
 | `lib/agentSandbox.ts` | Pure function `canSaveAsExample` (AG1): blocks saving a sandbox dialogue as a reusable example if any agent turn in it was rated 👎. Fully unit-tested. |
-| `lib/agentClient.ts` | The real call to `claude-haiku-4-5-20251001` (`POST /v1/messages` via `fetch`) for the agent's conversational replies — no tool use, no structured output, just a plain text response. Not unit-tested, same boundary treatment as `claudeAnalysisClient.ts`. |
+| `lib/agentClient.ts` | `respondAndExtractLead` (AG1+LEAD1): one structured `POST /v1/messages` call to `claude-haiku-4-5-20251001` (`output_config.format`) that returns both the reply text and the current full snapshot of lead fields in one round trip, replacing an earlier plain-text-only version. Not unit-tested, same boundary treatment as `claudeAnalysisClient.ts`. |
+| `lib/leadFields.ts` | Pure functions for LEAD1: `isLeadComplete` (required: destination/people/dates/contact; optional: budget/wishes), `parseAgentReplyContent` (defensive validator for `agentClient.ts`'s structured response, mirrors `parseAnalysisContent`). Fully unit-tested. |
+| `lib/leadIntake.ts` | `saveLeadDraft(conversationId, fields, source)` (LEAD1/LEAD2): upserts a `Lead` by `conversationId`, distinguishing insert from update via an explicit `findUnique` first (an insert triggers a one-time Telegram notification; updates don't). Not unit-tested — DB + Telegram boundary, verified directly via a temporary script instead. |
+| `lib/leadNotify.ts` | Pure function `buildLeadNotificationText` (LEAD2): formats a `Lead` into the Telegram message text. Fully unit-tested. |
+| `lib/telegramBot.ts` | Pure, dependency-injected `connectTelegramBot` (LEAD2): verifies a bot token via an injected client, then encrypts it — mirrors `claudeApiKey.ts`. Fully unit-tested. |
+| `lib/telegramClient.ts` | The real Telegram Bot API calls (LEAD2): `verifyToken` (`getMe`) and `sendTelegramMessage` (`sendMessage`). Not unit-tested, same boundary treatment as `claudeApiClient.ts`. |
 | `lib/prisma.ts` | Prisma client singleton, constructed with the `@prisma/adapter-pg` driver adapter. |
 | `components/*` | Client components for panel interactivity (forms, toggles, nav) — thin, calling server actions via `useTransition`. |
 
@@ -129,9 +134,25 @@ Prisma models (`app/prisma/schema.prisma`):
   Promoted from a sandbox session once every agent turn in it has been
   rated 👍 (or left unrated) — never if any turn was rated 👎.
 - **`AgentSandboxSession`** — a draft conversation (`turns` JSON, per-turn
-  `rating`, `status`: `draft`/`saved`) persisted to the DB from the first
-  message, not just client-side React state — a page reload doesn't lose
-  test progress.
+  `rating`, `status`: `draft`/`saved`, `leadFields` JSON — the latest
+  extracted-field snapshot for the LEAD1 preview panel) persisted to the DB
+  from the first message, not just client-side React state — a page reload
+  doesn't lose test progress.
+- **`Lead`** — one row per `conversationId`, all client-facing fields
+  (`destination`/`people`/`dates`/`budget`/`contact`/`wishes`) as
+  `string | null` rather than typed/structured, since the data is inherently
+  approximate and natural-language. Two independent status dimensions that
+  used to collide under one field name: `completeness` (`partial`/`complete`,
+  set by the agent from what's been said) and `status`
+  (`new`/`in_progress`/`closed`, changed by staff in `/panel/leads`) — a lead
+  can be data-complete and still `new` if nobody's picked it up yet, which a
+  single field couldn't represent. `source` (`sandbox`/`direct`/`comment`/
+  `site`) records which channel it came from.
+- **`TelegramBotConfig`** — a singleton row (`singleton: "telegram"`) holding
+  the notification bot's token, encrypted, plus `verified`/`verifiedAt` —
+  same shape as `ClaudeApiKeyConfig`.
+- **`TelegramNotificationRecipient`** — a manually-entered whitelist of
+  `chatId`s (+ optional `label`) that get a message on every new `Lead`.
 
 ## 5. Key decisions
 
@@ -212,3 +233,40 @@ Prisma models (`app/prisma/schema.prisma`):
   `/panel/users` — it's a system-wide configuration of the bot's behavior,
   not a manager's day-to-day tool. The nav item was moved out of the shared
   module list into the admin-gated section of `PanelNav`.
+- **One structured Claude call does both the reply and field extraction
+  (LEAD1).** `respondAndExtractLead` returns `{reply, fields}` from a single
+  `output_config.format` call rather than a separate "reply" call plus a
+  second "extract fields" call — half the cost and latency, and the model
+  always sees the full conversation so it can just re-derive the complete
+  field snapshot each turn instead of us maintaining a diff/merge.
+- **The sandbox previews extracted lead fields but never creates a real
+  `Lead`.** Decided during LEAD1's design: with no live channel (`CM1`/`DM1`/
+  `WEB5`) wired up yet, letting an admin's own sandbox testing write real
+  `Lead` rows would pollute the one measurable output the whole platform is
+  built around. `saveLeadDraft` exists and is verified directly (a temporary
+  script, deleted after use — same pattern as verifying paid-API guard
+  clauses elsewhere), but nothing calls it until a real channel does.
+- **`completeness` and `status` are separate fields on `Lead`, not one.**
+  They looked like the same "status" concept at first glance but track two
+  independent facts — whether the agent has enough data, and whether staff
+  have picked the lead up — and a lead is very commonly complete-but-`new`
+  at the same time. Collapsing them into one field would silently lose
+  whichever fact changed last.
+- **Telegram notifications use a manually-entered chat_id whitelist, not an
+  incoming webhook.** Building a webhook receiver just so the bot could
+  auto-discover a recipient's chat_id (by watching for their `/start`) would
+  mean standing up a public endpoint + signature verification for one
+  one-way, admin-configured notification list. Recipients get their own
+  chat_id externally (e.g. `@userinfobot`) and paste it in; the bot only
+  ever sends, never receives.
+- **A lead notification fires once, on insert, not on every field update.**
+  `saveLeadDraft` calls `findUnique` before writing specifically to tell
+  insert from update apart — a single conversation upserts the same `Lead`
+  row on every turn as the agent extracts more fields, and notifying on each
+  of those would spam every whitelisted recipient once per message.
+- **A Telegram bot must be messaged first before it can message back.**
+  A configured, verified bot token still failed to deliver a test message
+  until the recipient sent `/start` to the bot at least once — a standard
+  Telegram Bot API constraint, not a bug. The "Отправить тестовое сообщение"
+  button in `/panel/connections` exists specifically because there's no
+  live channel yet to prove end-to-end delivery any other way.
