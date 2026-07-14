@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { buildExampleDialogueTurns, canSaveAsExample, type SandboxTurn } from "./agentSandbox";
+import {
+  buildExampleDialogueTurns,
+  canSaveAsExample,
+  DEFAULT_SANDBOX_MODEL,
+  isValidSandboxModel,
+  SANDBOX_MODEL_OPTIONS,
+  type SandboxTurn,
+} from "./agentSandbox";
 
 describe("canSaveAsExample", () => {
   it("returns false for an empty session", () => {
@@ -52,5 +59,28 @@ describe("buildExampleDialogueTurns", () => {
 
   it("returns an empty array for an empty session", () => {
     expect(buildExampleDialogueTurns([])).toEqual([]);
+  });
+});
+
+describe("SANDBOX_MODEL_OPTIONS", () => {
+  it("excludes Fable/Mythos and includes the default model", () => {
+    const ids = SANDBOX_MODEL_OPTIONS.map((option) => option.id);
+
+    expect(ids).toContain(DEFAULT_SANDBOX_MODEL);
+    expect(ids.some((id) => id.includes("fable"))).toBe(false);
+    expect(ids.some((id) => id.includes("mythos"))).toBe(false);
+  });
+});
+
+describe("isValidSandboxModel", () => {
+  it("accepts every listed sandbox model", () => {
+    for (const option of SANDBOX_MODEL_OPTIONS) {
+      expect(isValidSandboxModel(option.id)).toBe(true);
+    }
+  });
+
+  it("rejects a model id that is not in the list", () => {
+    expect(isValidSandboxModel("claude-fable-5")).toBe(false);
+    expect(isValidSandboxModel("not-a-model")).toBe(false);
   });
 });

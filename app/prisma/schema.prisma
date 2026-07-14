@@ -162,6 +162,7 @@ model AgentSandboxSession {
   id         String   @id @default(cuid())
   turns      Json
   leadFields Json?
+  model      String   @default("claude-haiku-4-5-20251001")
   status     String   @default("draft")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
