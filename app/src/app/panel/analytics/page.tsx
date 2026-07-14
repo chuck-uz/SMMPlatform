@@ -179,7 +179,7 @@ export default async function AnalyticsPage({
         <>
           <p className="mt-8 max-w-[640px] text-[12.5px] leading-relaxed text-muted-foreground">
             Ключевые метрики с изменением к прошлому периоду, лучшие/худшие публикации, паттерны
-            времени и аномалии — данные для AI-разбора (AN4).
+            времени и аномалии — данные для AI-разбора.
           </p>
           <div className="mt-3">
             <PeriodSelector accountId={selectedAccount.id} preset={preset} from={fromParam} to={toParam} />

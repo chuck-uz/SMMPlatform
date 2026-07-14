@@ -13,6 +13,10 @@ const fieldLabelClass = "block text-[11.5px] font-semibold uppercase tracking-wi
 const fieldClass =
   "mt-1 rounded-[10px] border border-border bg-card px-3 py-2 text-sm text-foreground shadow-card";
 
+function formatDateInput(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
 export function PeriodSelector({
   accountId,
   preset,
@@ -25,6 +29,17 @@ export function PeriodSelector({
   to?: string;
 }) {
   const [selected, setSelected] = useState(preset);
+  const [customFrom, setCustomFrom] = useState(from);
+  const [customTo, setCustomTo] = useState(to);
+
+  function handlePeriodChange(value: string) {
+    setSelected(value);
+    if (value === "custom") {
+      const now = new Date();
+      setCustomFrom((prev) => prev ?? formatDateInput(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)));
+      setCustomTo((prev) => prev ?? formatDateInput(now));
+    }
+  }
 
   return (
     <form action="/panel/analytics" method="GET" className="flex flex-wrap items-end gap-3">
@@ -35,7 +50,7 @@ export function PeriodSelector({
         <select
           name="period"
           value={selected}
-          onChange={(event) => setSelected(event.target.value)}
+          onChange={(event) => handlePeriodChange(event.target.value)}
           className={fieldClass}
         >
           {PRESET_OPTIONS.map((option) => (
@@ -49,11 +64,25 @@ export function PeriodSelector({
         <>
           <div>
             <label className={fieldLabelClass}>С</label>
-            <input type="date" name="from" defaultValue={from} required className={fieldClass} />
+            <input
+              type="date"
+              name="from"
+              value={customFrom ?? ""}
+              onChange={(event) => setCustomFrom(event.target.value)}
+              required
+              className={fieldClass}
+            />
           </div>
           <div>
             <label className={fieldLabelClass}>По</label>
-            <input type="date" name="to" defaultValue={to} required className={fieldClass} />
+            <input
+              type="date"
+              name="to"
+              value={customTo ?? ""}
+              onChange={(event) => setCustomTo(event.target.value)}
+              required
+              className={fieldClass}
+            />
           </div>
         </>
       )}
