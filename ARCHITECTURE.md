@@ -80,7 +80,9 @@ All application code lives in `app/src`.
 | `lib/instagramPoller.ts` | Pure normalization functions for the content poller: `normalizeMedia`, `normalizeComment`, `flattenInsights`, `buildMetricSnapshot`, `isActiveStory`, `normalizeFollowerCount`, `shouldFetchDemographics`, `buildDemographicsMetrics`, `dailyHistory` (groups snapshots into one-per-calendar-day, also the fallback for expired stories). Fully unit-tested against fixture Graph API payloads — no network or DB. |
 | `lib/instagramContentClient.ts` | The real Graph API calls (`graph.instagram.com/me/media`, `/{media-id}/comments`, `/me/insights`, `/{media-id}/insights`, `/me` for follower count, demographics breakdown insights). Not unit-tested, same boundary treatment as `instagramApiClient.ts`. |
 | `lib/analyticsDashboard.ts` | Pure read-side functions for the analytics dashboard: `buildAccountMetricCharts`/`buildMetricSeries` (per-metric Recharts series from `dailyHistory()` output), `buildMediaTableRows` (attaches latest metric snapshot to each media row), `parseAgeGenderBreakdown`/`parseGeographyBreakdown` (unpack Meta's nested `total_value.breakdowns[].results[]` demographics shape into chart-ready bars). Fully unit-tested against fixture payloads — no network or DB, mirrors the poller/client split (`instagramPoller.ts` = write-side, this = read-side). |
-| `lib/analyticsSummary.ts` | Pure functions for the period summary (data prep for the future AN4 AI analysis): `resolvePeriodRange` (preset or custom → current + equal-length previous range), `buildMetricDeltas` (flow metrics summed, the `followerCount` stock metric compared by last value), `rankMedia`/`buildWeekdayPattern`/`buildTimeOfDayPattern` (FEED/REELS only, ranked by `total_interactions`, time buckets gated at 3+ samples), `detectAnomalies` (day deviates >50% from the period average, gated at 4+ data points). Fully unit-tested, no DB access. |
+| `lib/analyticsSummary.ts` | Pure functions for the period summary (data prep for the AN4 AI analysis): `resolvePeriodRange` (preset or custom → current + equal-length previous range), `buildMetricDeltas` (flow metrics summed, the `followerCount` stock metric compared by last value), `rankMedia`/`buildWeekdayPattern`/`buildTimeOfDayPattern` (FEED/REELS only, ranked by `total_interactions`, time buckets gated at 3+ samples), `detectAnomalies` (day deviates >50% from the period average, gated at 4+ data points). Fully unit-tested, no DB access. |
+| `lib/analysisReport.ts` | Pure functions for the AI analysis feature (AN4): `serializeSummaryForPrompt`/`buildAnalysisPrompt` (turn a `PeriodSummary` into the prompt sent to Claude), `shouldSkipManualAnalysis` (5-minute cooldown per account+period), `isDigestDue` (7-day gate for the weekly digest), `parseAnalysisContent` (defensive validation of Claude's structured response). Fully unit-tested. |
+| `lib/claudeAnalysisClient.ts` | The real call to `claude-sonnet-5` (`POST /v1/messages` via `fetch`, matching `claudeApiClient.ts`'s boundary treatment) with `output_config.format` (JSON Schema: `summary`/`observations`/`recommendations`) and an anti-hallucination system prompt. Not unit-tested. |
 | `lib/prisma.ts` | Prisma client singleton, constructed with the `@prisma/adapter-pg` driver adapter. |
 | `components/*` | Client components for panel interactivity (forms, toggles, nav) — thin, calling server actions via `useTransition`. |
 
@@ -108,6 +110,10 @@ Prisma models (`app/prisma/schema.prisma`):
   snapshots only exist once the account has 100+ followers (Meta's own
   threshold); follower growth is derived from day-over-day `followerCount`
   deltas in `account`-scope snapshots, not a separate metric.
+- **`AiAnalysisReport`** — append-only, one row per AI analysis run
+  (`trigger`: `manual`/`weekly`, `content` JSON: `summary`/`observations`/
+  `recommendations`, `periodFrom`/`periodTo`). Never overwritten — past
+  reports stay visible in the panel.
 
 ## 5. Key decisions
 
@@ -164,3 +170,13 @@ Prisma models (`app/prisma/schema.prisma`):
   matching `dailyHistory()`'s and the weekday/time-of-day bucketing's
   existing UTC convention. Any new date-formatting call in this codebase
   should do the same.
+- **Structured output over free-form text for the AI analysis (AN4).**
+  `claudeAnalysisClient.ts` uses `output_config.format` (JSON Schema) instead
+  of asking Claude for markdown and parsing it — guarantees a shape that maps
+  directly onto `AiAnalysisReport.content`, with `parseAnalysisContent()` as
+  a defensive fallback in case a response still doesn't validate.
+- **No day/time pinning for the weekly digest.** Rather than a cron-like
+  "every Monday 9am", the digest interval in `instrumentation.ts` just checks
+  every 6 hours whether the last `weekly` report for an account is 7+ days
+  old — same "no extra scheduler" reasoning as the other pollers, and avoids
+  timezone/DST edge cases for a single weekly email-equivalent.

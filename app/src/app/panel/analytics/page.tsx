@@ -13,6 +13,9 @@ import { MediaTable } from "@/components/MediaTable";
 import { DemographicsBlock } from "@/components/DemographicsBlock";
 import { PeriodSelector } from "@/components/PeriodSelector";
 import { SummaryPanel } from "@/components/SummaryPanel";
+import { AnalysisTrigger } from "@/components/AnalysisTrigger";
+import { AnalysisReportsList } from "@/components/AnalysisReportsList";
+import type { AnalysisContent } from "@/lib/analysisReport";
 
 const VALID_PRESETS: PeriodPreset[] = ["7d", "30d", "90d", "custom"];
 
@@ -117,6 +120,12 @@ export default async function AnalyticsPage({
   });
   const summary = buildPeriodSummary({ range, currentPoints, previousPoints, media, latestMetricsByMediaId });
 
+  const analysisReports = await prisma.aiAnalysisReport.findMany({
+    where: { accountId: selectedAccount.id },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, trigger: true, periodFrom: true, periodTo: true, createdAt: true, content: true },
+  });
+
   return (
     <div className="p-6 sm:p-8 sm:px-10">
       <div className="flex flex-col items-start gap-4 sm:flex-row sm:flex-wrap sm:justify-between">
@@ -152,6 +161,23 @@ export default async function AnalyticsPage({
       </div>
       <div className="mt-4">
         <SummaryPanel summary={summary} />
+      </div>
+
+      <h2 className="mt-9 text-[13.5px] font-semibold text-foreground">AI-разбор</h2>
+      <p className="mt-1 max-w-[640px] text-[12.5px] leading-relaxed text-muted-foreground">
+        Claude разбирает сводку выше и даёт наблюдения и рекомендации, опираясь только на
+        собранные данные. Еженедельный дайджест формируется автоматически.
+      </p>
+      <div className="mt-3">
+        <AnalysisTrigger accountId={selectedAccount.id} preset={preset} from={fromParam} to={toParam} />
+      </div>
+      <div className="mt-4 max-w-[1020px]">
+        <AnalysisReportsList
+          reports={analysisReports.map((report) => ({
+            ...report,
+            content: report.content as unknown as AnalysisContent,
+          }))}
+        />
       </div>
     </div>
   );
