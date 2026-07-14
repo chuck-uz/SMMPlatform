@@ -6,6 +6,16 @@ import { ExamplesList } from "@/components/ExamplesList";
 import { SandboxChat } from "@/components/SandboxChat";
 import type { SandboxTurn } from "@/lib/agentSandbox";
 import type { DialogueTurn } from "@/lib/agentPrompt";
+import type { LeadFields } from "@/lib/leadFields";
+
+const EMPTY_LEAD_FIELDS: LeadFields = {
+  destination: null,
+  people: null,
+  dates: null,
+  budget: null,
+  contact: null,
+  wishes: null,
+};
 
 export default async function ScenariosPage() {
   const session = await auth();
@@ -66,6 +76,7 @@ export default async function ScenariosPage() {
         <SandboxChat
           initialSessionId={draftSession?.id ?? null}
           initialTurns={(draftSession?.turns as unknown as SandboxTurn[]) ?? []}
+          initialLeadFields={(draftSession?.leadFields as unknown as LeadFields) ?? EMPTY_LEAD_FIELDS}
         />
       </div>
     </div>

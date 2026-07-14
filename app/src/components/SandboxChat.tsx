@@ -9,16 +9,38 @@ import {
   sendSandboxMessageAction,
 } from "@/app/panel/scenarios/actions";
 import { canSaveAsExample, type SandboxTurn } from "@/lib/agentSandbox";
+import { isLeadComplete, type LeadFields } from "@/lib/leadFields";
+
+const EMPTY_LEAD_FIELDS: LeadFields = {
+  destination: null,
+  people: null,
+  dates: null,
+  budget: null,
+  contact: null,
+  wishes: null,
+};
+
+const LEAD_FIELD_LABELS: Record<keyof LeadFields, string> = {
+  destination: "Направление",
+  people: "Люди",
+  dates: "Даты",
+  budget: "Бюджет",
+  contact: "Контакт",
+  wishes: "Пожелания",
+};
 
 export function SandboxChat({
   initialSessionId,
   initialTurns,
+  initialLeadFields,
 }: {
   initialSessionId: string | null;
   initialTurns: SandboxTurn[];
+  initialLeadFields: LeadFields;
 }) {
   const [sessionId, setSessionId] = useState(initialSessionId);
   const [turns, setTurns] = useState<SandboxTurn[]>(initialTurns);
+  const [leadFields, setLeadFields] = useState<LeadFields>(initialLeadFields);
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -35,6 +57,7 @@ export function SandboxChat({
         const result = await sendSandboxMessageAction({ sessionId, message: text });
         setSessionId(result.sessionId);
         setTurns(result.turns);
+        setLeadFields(result.leadFields);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Не удалось получить ответ агента");
       }
@@ -57,6 +80,7 @@ export function SandboxChat({
         await saveSandboxSessionAsExampleAction(sessionId);
         setSessionId(null);
         setTurns([]);
+        setLeadFields(EMPTY_LEAD_FIELDS);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Не удалось сохранить пример");
       }
@@ -66,12 +90,14 @@ export function SandboxChat({
   function handleDiscard() {
     if (!sessionId) {
       setTurns([]);
+      setLeadFields(EMPTY_LEAD_FIELDS);
       return;
     }
     startTransition(async () => {
       await discardSandboxSessionAction(sessionId);
       setSessionId(null);
       setTurns([]);
+      setLeadFields(EMPTY_LEAD_FIELDS);
     });
   }
 
@@ -126,6 +152,31 @@ export function SandboxChat({
           ))
         )}
       </div>
+
+      {turns.length > 0 ? (
+        <div className="border-t border-border p-4">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[11.5px] font-semibold uppercase tracking-wide text-subtle">
+              Извлечённые поля заявки
+            </span>
+            <span
+              className={`inline-flex items-center rounded-full px-[10px] py-1 text-xs font-semibold ${
+                isLeadComplete(leadFields) ? "bg-accent/10 text-accent-hover" : "bg-warning/10 text-warning"
+              }`}
+            >
+              {isLeadComplete(leadFields) ? "Заявка полная" : "Частичная"}
+            </span>
+          </div>
+          <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3">
+            {(Object.keys(LEAD_FIELD_LABELS) as Array<keyof LeadFields>).map((key) => (
+              <div key={key}>
+                <dt className="text-[11px] text-subtle">{LEAD_FIELD_LABELS[key]}</dt>
+                <dd className="truncate text-[13px] text-foreground">{leadFields[key] || "—"}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      ) : null}
 
       <div className="border-t border-border p-4">
         <div className="flex gap-2">

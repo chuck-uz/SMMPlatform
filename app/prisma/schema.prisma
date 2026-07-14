@@ -145,11 +145,28 @@ model AgentExampleDialogue {
 }
 
 model AgentSandboxSession {
-  id        String   @id @default(cuid())
-  turns     Json
-  status    String   @default("draft")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  turns      Json
+  leadFields Json?
+  status     String   @default("draft")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@map("agent_sandbox_sessions")
+}
+
+model Lead {
+  id             String   @id @default(cuid())
+  conversationId String   @unique
+  destination    String?
+  people         String?
+  dates          String?
+  budget         String?
+  contact        String?
+  wishes         String?
+  status         String   @default("partial")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("leads")
 }
