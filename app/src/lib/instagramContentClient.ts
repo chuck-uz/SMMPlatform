@@ -50,6 +50,9 @@ export const instagramContentClient = {
 
     while (nextUrl && pageCount < MAX_PAGES) {
       const data = await fetchJson(nextUrl);
+      if (pageCount === 0) {
+        console.log(`[instagram-comments-poll] raw response for ${mediaId}: ${JSON.stringify(data).slice(0, 800)}`);
+      }
       comments.push(...(data.data ?? []));
       nextUrl = data.paging?.next ? new URL(data.paging.next) : null;
       pageCount += 1;
