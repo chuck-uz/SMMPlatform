@@ -140,14 +140,9 @@ export async function register() {
 
         if (shouldFetchDemographics(followerCount)) {
           const demographics = await instagramContentClient.getAudienceDemographics({ accessToken });
-          const demographicsMetrics = buildDemographicsMetrics(demographics);
-          console.log(
-            `[instagram-metrics-poll] demographics shape for account ${account.id}:`,
-            JSON.stringify(demographicsMetrics).slice(0, 2000),
-          );
           await prisma.instagramMetricSnapshot.create({
             data: buildMetricSnapshot({
-              metrics: demographicsMetrics,
+              metrics: buildDemographicsMetrics(demographics),
               scope: "demographics",
               accountId: account.id,
               now,
