@@ -3,29 +3,13 @@ import Link from "next/link";
 export const ANALYTICS_TABS: Array<{ value: string; label: string }> = [
   { value: "overview", label: "Обзор" },
   { value: "posts", label: "Публикации" },
-  { value: "summary", label: "Сводка" },
-  { value: "ai", label: "AI и стратегия" },
+  { value: "ai", label: "AI-разбор" },
 ];
 
-export function AnalyticsTabs({
-  activeTab,
-  accountId,
-  preset,
-  from,
-  to,
-}: {
-  activeTab: string;
-  accountId: string;
-  preset: string;
-  from?: string;
-  to?: string;
-}) {
+export function AnalyticsTabs({ activeTab, accountId }: { activeTab: string; accountId: string }) {
   function buildHref(tab: string) {
     const params = new URLSearchParams();
     params.set("account", accountId);
-    params.set("period", preset);
-    if (from) params.set("from", from);
-    if (to) params.set("to", to);
     if (tab !== "overview") params.set("tab", tab);
     return `/panel/analytics?${params.toString()}`;
   }

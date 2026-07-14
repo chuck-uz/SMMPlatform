@@ -1,20 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { runManualAnalysisAction } from "@/app/panel/analytics/actions";
-import type { PeriodPreset } from "@/lib/analyticsSummary";
+import { runManualInsightsAction } from "@/app/panel/analytics/actions";
 
-export function AnalysisTrigger({
-  accountId,
-  preset,
-  from,
-  to,
-}: {
-  accountId: string;
-  preset: PeriodPreset;
-  from?: string;
-  to?: string;
-}) {
+export function AccountInsightsTrigger({ accountId }: { accountId: string }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -22,7 +11,7 @@ export function AnalysisTrigger({
     setError(null);
     startTransition(async () => {
       try {
-        await runManualAnalysisAction({ accountId, preset, from, to });
+        await runManualInsightsAction({ accountId });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Не удалось выполнить разбор");
       }
