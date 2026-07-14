@@ -16,6 +16,7 @@ Two core points: **(1)** consultation and lead capture, **(2)** promotion and ac
 - **Instagram connection** — official OAuth login (Instagram API with Instagram Login, no raw account password ever handled); the access token is stored encrypted (AES-256-GCM) and renews itself before it expires, with no manual step; status and remaining validity are shown in the panel, with a warning when access is about to expire; disconnecting an account is one click.
 - **API security** — rate limiting on every internal API route (a stricter limit specifically on the panel login, against password guessing); a webhook-signature-verification utility is already in place ahead of the future Instagram webhook integration.
 - **Claude connection** — an admin enters the API key in the panel; it's stored encrypted and verified with a real request to the Anthropic API, with the verification status shown in the panel.
+- **Instagram data collection** — connected accounts are polled in the background: media (posts/Reels/stories), comments, and metrics/insights are fetched automatically on independent schedules, without duplicates; the last-poll status is visible in the panel.
 - **Uptime monitoring** — an automated check every 10 minutes, with an email alert on downtime.
 
 The full roadmap (Instagram analytics, an AI agent for DMs and comments, lead intake and tracking, content publishing, the agency's own website) lives on the interactive roadmap site: **[roadmap-platform.oresh.in](https://roadmap-platform.oresh.in)**.

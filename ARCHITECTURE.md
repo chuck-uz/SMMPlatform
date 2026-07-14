@@ -54,6 +54,7 @@ is marked `done` in `roadmap.json` only once its `done_when` is verified.
 | Deployment | Docker (multi-stage: builder, prisma-tools, runner) on DockHost | Standalone Next.js output; `entrypoint.sh` runs `prisma migrate deploy` + conditional seed on every boot |
 | Uptime | Scheduled GitHub Actions workflow (`.github/workflows/uptime-smm.yml`) | Pings prod every 10 min; a failed run triggers GitHub's built-in failure email — no extra infra |
 | Auto-renewal | In-process `setInterval` in `src/instrumentation.ts` | The Next.js standalone server is already a long-lived process; avoids standing up a second scheduler for one job |
+| Content polling | Several independent `setInterval`s in `src/instrumentation.ts` (media 15min, comments 5min, metrics 2h, story metrics 1h) | Instagram webhooks aren't reliably delivered in dev; same "no extra scheduler" reasoning as token auto-renewal, one interval per data cadence |
 
 ## 3. Source layout
 
@@ -76,12 +77,14 @@ All application code lives in `app/src`.
 | `lib/verifyCredentials.ts`, `changePassword.ts`, `createUser.ts`, `setUserActive.ts` | Panel auth/user-management business logic, each paired with a `.test.ts`. |
 | `lib/claudeApiKey.ts` | Pure, dependency-injected logic for saving the platform's Claude API key: verifies it against the real API, then encrypts it. The verification client is injected (`ClaudeApiClient`), so this is unit-tested without a real key or network call. |
 | `lib/claudeApiClient.ts` | The real `ClaudeApiClient` implementation — calls Anthropic's `GET /v1/models` (cheap, no token cost) to check the key is valid. Not unit-tested, same boundary treatment as `instagramApiClient.ts`. |
+| `lib/instagramPoller.ts` | Pure normalization functions for the content poller: `normalizeMedia`, `normalizeComment`, `flattenInsights`, `buildMetricSnapshot`, `isActiveStory`. Fully unit-tested against fixture Graph API payloads — no network or DB. |
+| `lib/instagramContentClient.ts` | The real Graph API calls (`graph.instagram.com/me/media`, `/{media-id}/comments`, `/me/insights`, `/{media-id}/insights`). Not unit-tested, same boundary treatment as `instagramApiClient.ts`. |
 | `lib/prisma.ts` | Prisma client singleton, constructed with the `@prisma/adapter-pg` driver adapter. |
 | `components/*` | Client components for panel interactivity (forms, toggles, nav) — thin, calling server actions via `useTransition`. |
 
 ## 4. Data model
 
-Three Prisma models so far (`app/prisma/schema.prisma`):
+Prisma models (`app/prisma/schema.prisma`):
 
 - **`User`** — panel accounts (`email`, `passwordHash`, `role`, `isActive`).
 - **`InstagramAccount`** — one row per connected Instagram account
@@ -92,6 +95,13 @@ Three Prisma models so far (`app/prisma/schema.prisma`):
   the platform's own Claude API key, encrypted, plus `verified`/`verifiedAt`.
   Global rather than per-user: the key powers server-side AI features (analytics,
   content, auto-replies), not a per-account external login like Instagram.
+- **`InstagramMedia`** / **`InstagramComment`** — one row per post/Reel/story
+  and per comment, deduped by their Instagram ID (upsert on poll). Current-state
+  entities, not history — engagement counts are overwritten on each poll.
+- **`InstagramMetricSnapshot`** — append-only: one row per poll per
+  account/media, `scope` (`account`/`media`/`story`) + a `metrics` JSON blob +
+  `capturedAt`. Raw timestamped snapshots; `AN1` builds trend history on top
+  of these rather than this table itself being the history.
 
 ## 5. Key decisions
 
@@ -110,3 +120,13 @@ Three Prisma models so far (`app/prisma/schema.prisma`):
   if `--variable`/`--port` are omitted, not just the image. Always pass the
   complete variable list and port when updating an existing container via the
   CLI, or use the dashboard's per-field edit instead.
+- **DockHost auto-rebuilds `smm` on every push to `main`** — no need to run
+  `dockhost repository build` manually; just push and check
+  `dockhost container list`/`dockhost container logs smm` after a minute or two.
+- **Instagram API with Instagram Login addresses the token's own account via
+  `/me`, not its own ID.** `GET /{instagramUserId}/media` and `/insights`
+  return a `code 100 / subcode 33` "object does not exist" error even with a
+  valid token; `GET /me/media` and `/me/insights` work. Found by deploying the
+  IG3 poller against a real connected account — media-level and comment-level
+  calls (`/{media-id}/...`) are unaffected since they address the object's own
+  ID, not the account's.
