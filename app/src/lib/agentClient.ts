@@ -31,6 +31,7 @@ export async function respondAndExtractLead(
   systemPrompt: string,
   messages: Array<{ role: "user" | "assistant"; content: string }>,
 ): Promise<AgentReplyContent> {
+  const startedAt = Date.now();
   const response = await fetch(MESSAGES_URL, {
     method: "POST",
     headers: {
@@ -46,6 +47,7 @@ export async function respondAndExtractLead(
       output_config: { format: { type: "json_schema", schema: REPLY_OUTPUT_SCHEMA } },
     }),
   });
+  console.log(`[agentClient] Claude call took ${Date.now() - startedAt}ms, status ${response.status}`);
 
   if (!response.ok) {
     throw new Error(`Claude API error ${response.status}: ${await response.text()}`);
