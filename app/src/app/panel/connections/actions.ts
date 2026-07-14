@@ -136,14 +136,18 @@ export async function sendTestTelegramMessageAction() {
 
   let sent = 0;
   let failed = 0;
+  const errors: string[] = [];
   for (const recipient of recipients) {
     try {
       await sendTelegramMessage(botToken, recipient.chatId, text);
       sent += 1;
-    } catch {
+    } catch (error) {
       failed += 1;
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[telegram-test] failed to send to chatId ${recipient.chatId}`, error);
+      errors.push(`${recipient.chatId}: ${message}`);
     }
   }
 
-  return { sent, failed };
+  return { sent, failed, errors };
 }
