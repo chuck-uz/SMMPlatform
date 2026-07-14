@@ -68,7 +68,7 @@ All application code lives in `app/src`.
 | `app/api/auth/[...nextauth]/route.ts` | NextAuth's own route handlers. |
 | `app/api/instagram/authorize/route.ts` | Redirects to Instagram's OAuth authorize URL (Track A scopes only), sets a CSRF `state` cookie. |
 | `app/api/instagram/callback/route.ts` | Validates `state`, exchanges the code for a long-lived token via `instagramOAuth.ts`, stores it encrypted. |
-| `app/panel/*` | Server-rendered panel pages: `connections`, `users` (admin-only), `profile`, plus stubs for modules not yet built (`inbox`, `analytics`, `content`, `scenarios`). Each mutable page pairs with an `actions.ts` (server actions). |
+| `app/panel/*` | Server-rendered panel pages: `connections`, `users` (admin-only), `profile`, `analytics` (multi-account charts/table/demographics), plus stubs for modules not yet built (`inbox`, `content`, `scenarios`). Each mutable page pairs with an `actions.ts` (server actions). |
 | `lib/instagramOAuth.ts` | Pure, dependency-injected OAuth orchestration: `buildAuthorizeUrl`, `connectInstagramAccount`, `refreshAccountToken`, `daysUntilExpiry`. The real Instagram API calls are injected as an `InstagramApiClient`, so this is fully unit-tested without hitting the network. |
 | `lib/instagramApiClient.ts` | The real `InstagramApiClient` implementation (`fetch` calls to `api.instagram.com` / `graph.instagram.com`). Not unit-tested — same boundary treatment as `prisma.ts`. |
 | `lib/encryption.ts` | AES-256-GCM `encrypt`/`decrypt`, key passed as a parameter (never read from `process.env` inside the function) — used to store the Instagram access token. |
@@ -79,6 +79,7 @@ All application code lives in `app/src`.
 | `lib/claudeApiClient.ts` | The real `ClaudeApiClient` implementation — calls Anthropic's `GET /v1/models` (cheap, no token cost) to check the key is valid. Not unit-tested, same boundary treatment as `instagramApiClient.ts`. |
 | `lib/instagramPoller.ts` | Pure normalization functions for the content poller: `normalizeMedia`, `normalizeComment`, `flattenInsights`, `buildMetricSnapshot`, `isActiveStory`, `normalizeFollowerCount`, `shouldFetchDemographics`, `buildDemographicsMetrics`, `dailyHistory` (groups snapshots into one-per-calendar-day, also the fallback for expired stories). Fully unit-tested against fixture Graph API payloads — no network or DB. |
 | `lib/instagramContentClient.ts` | The real Graph API calls (`graph.instagram.com/me/media`, `/{media-id}/comments`, `/me/insights`, `/{media-id}/insights`, `/me` for follower count, demographics breakdown insights). Not unit-tested, same boundary treatment as `instagramApiClient.ts`. |
+| `lib/analyticsDashboard.ts` | Pure read-side functions for the analytics dashboard: `buildAccountMetricCharts`/`buildMetricSeries` (per-metric Recharts series from `dailyHistory()` output), `buildMediaTableRows` (attaches latest metric snapshot to each media row), `parseAgeGenderBreakdown`/`parseGeographyBreakdown` (unpack Meta's nested `total_value.breakdowns[].results[]` demographics shape into chart-ready bars). Fully unit-tested against fixture payloads — no network or DB, mirrors the poller/client split (`instagramPoller.ts` = write-side, this = read-side). |
 | `lib/prisma.ts` | Prisma client singleton, constructed with the `@prisma/adapter-pg` driver adapter. |
 | `components/*` | Client components for panel interactivity (forms, toggles, nav) — thin, calling server actions via `useTransition`. |
 
@@ -140,3 +141,16 @@ Prisma models (`app/prisma/schema.prisma`):
   message lists the full valid metric set for that media type, which is the
   fastest way to fix it; treat any new insights metric added here as
   unverified until it's been exercised against a real account at least once.
+- **Recharts for the analytics dashboard.** First charting dependency in the
+  project (React 19 compatible). Chosen over hand-rolled SVG for the built-in
+  tooltips/responsive containers that `AN2`'s "one chart per collected metric"
+  scope needed.
+- **Read-side data shaping lives in `lib/analyticsDashboard.ts`, separate from
+  the poller's write-side `lib/instagramPoller.ts`.** Same pure-function/DI
+  pattern, just facing the other direction: takes already-queried Prisma rows
+  and reshapes them for the UI, never touches the database itself.
+- **Meta's demographics breakdown shape, confirmed on real data.** AN1 stored
+  the raw `total_value.breakdowns[].results[]` structure without ever
+  rendering it; `AN2`'s parsers assumed the documented shape and were verified
+  against the real `@chuck_uz` response after deploy — it matched, no fix
+  needed.
