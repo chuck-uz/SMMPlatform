@@ -45,6 +45,8 @@ export async function register() {
     isInsightsDigestDue,
   } = await import("@/lib/accountInsights");
   const { analyzeAccountInsights } = await import("@/lib/claudeInsightsClient");
+  const { buildCommentReplySystemPrompt, buildCommentUserMessage } = await import("@/lib/commentReply");
+  const { generateCommentReply } = await import("@/lib/commentReplyClient");
 
   async function refreshExpiringTokens() {
     const encryptionKey = process.env.ENCRYPTION_KEY;
@@ -107,6 +109,12 @@ export async function register() {
     if (!encryptionKey) return;
 
     const accounts = await prisma.instagramAccount.findMany({ include: { media: true } });
+    const claudeConfig = await prisma.claudeApiKeyConfig.findUnique({ where: { singleton: "claude" } });
+    const agentConfig = await prisma.agentConfig.findUnique({ where: { singleton: "agent" } });
+    const knowledgeDocuments = await prisma.agentKnowledgeDocument.findMany({
+      select: { title: true, body: true },
+    });
+    const canAutoReply = Boolean(claudeConfig?.verified && agentConfig);
 
     for (const account of accounts) {
       try {
@@ -120,11 +128,57 @@ export async function register() {
 
           for (const raw of rawComments) {
             const comment = normalizeComment(raw, media.id);
-            await prisma.instagramComment.upsert({
-              where: { instagramCommentId: comment.instagramCommentId },
-              create: comment,
-              update: {},
-            });
+
+            let created;
+            try {
+              created = await prisma.instagramComment.create({ data: comment });
+            } catch (error) {
+              // P2002 unique constraint — comment already seen on a previous poll, nothing to do.
+              if (error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "P2002") {
+                continue;
+              }
+              throw error;
+            }
+
+            if (!canAutoReply || !claudeConfig || !agentConfig) continue;
+
+            try {
+              const apiKey = decrypt(claudeConfig.encryptedApiKey, encryptionKey);
+              const systemPrompt = buildCommentReplySystemPrompt({
+                commentToneAndRules: agentConfig.commentToneAndRules,
+                knowledgeDocuments,
+              });
+              const userMessage = buildCommentUserMessage({ text: created.text, username: created.username });
+              const { reply } = await generateCommentReply(apiKey, systemPrompt, userMessage);
+
+              if (agentConfig.commentModerationEnabled) {
+                await prisma.instagramComment.update({
+                  where: { id: created.id },
+                  data: { draftReply: reply, replyStatus: "draft_ready" },
+                });
+              } else {
+                const posted = await instagramContentClient.postCommentReply({
+                  accessToken,
+                  commentId: created.instagramCommentId,
+                  message: reply,
+                });
+                await prisma.instagramComment.update({
+                  where: { id: created.id },
+                  data: {
+                    draftReply: reply,
+                    replyStatus: "sent",
+                    repliedAt: new Date(),
+                    sentReplyId: typeof posted?.id === "string" ? posted.id : null,
+                  },
+                });
+              }
+            } catch (error) {
+              console.error(`[instagram-comments-poll] reply failed for comment ${created.id}`, error);
+              await prisma.instagramComment.update({
+                where: { id: created.id },
+                data: { replyStatus: "failed" },
+              });
+            }
           }
         }
       } catch (error) {

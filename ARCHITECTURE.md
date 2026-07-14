@@ -68,7 +68,7 @@ All application code lives in `app/src`.
 | `app/api/auth/[...nextauth]/route.ts` | NextAuth's own route handlers. |
 | `app/api/instagram/authorize/route.ts` | Redirects to Instagram's OAuth authorize URL (Track A scopes only), sets a CSRF `state` cookie. |
 | `app/api/instagram/callback/route.ts` | Validates `state`, exchanges the code for a long-lived token via `instagramOAuth.ts`, stores it encrypted. |
-| `app/panel/*` | Server-rendered panel pages: `connections`, `users` (admin-only), `profile`, `analytics` (multi-account charts/table/demographics), `scenarios` (admin-only AI agent core: tone, knowledge base, examples, sandbox), `leads` (admin+manager: status-filtered list of collected `Lead` records, "take into work"/"close" transitions), plus a stub for the module not yet built (`inbox`, now scoped to dialogue history only — lead cards moved to `leads`). Each mutable page pairs with an `actions.ts` (server actions). |
+| `app/panel/*` | Server-rendered panel pages: `connections`, `users` (admin-only), `profile`, `analytics` (multi-account charts/table/demographics), `scenarios` (admin-only AI agent core: tone, knowledge base, examples, sandbox, plus CM1's comment tone + moderation toggle), `leads` (admin+manager: status-filtered list of collected `Lead` records, "take into work"/"close" transitions), `inbox` (admin+manager: CM1's comment-reply review queue — pending drafts to approve/edit/regenerate, recent sent history). Each mutable page pairs with an `actions.ts` (server actions). |
 | `lib/instagramOAuth.ts` | Pure, dependency-injected OAuth orchestration: `buildAuthorizeUrl`, `connectInstagramAccount`, `refreshAccountToken`, `daysUntilExpiry`. The real Instagram API calls are injected as an `InstagramApiClient`, so this is fully unit-tested without hitting the network. |
 | `lib/instagramApiClient.ts` | The real `InstagramApiClient` implementation (`fetch` calls to `api.instagram.com` / `graph.instagram.com`). Not unit-tested — same boundary treatment as `prisma.ts`. |
 | `lib/encryption.ts` | AES-256-GCM `encrypt`/`decrypt`, key passed as a parameter (never read from `process.env` inside the function) — used to store the Instagram access token. |
@@ -78,7 +78,7 @@ All application code lives in `app/src`.
 | `lib/claudeApiKey.ts` | Pure, dependency-injected logic for saving the platform's Claude API key: verifies it against the real API, then encrypts it. The verification client is injected (`ClaudeApiClient`), so this is unit-tested without a real key or network call. |
 | `lib/claudeApiClient.ts` | The real `ClaudeApiClient` implementation — calls Anthropic's `GET /v1/models` (cheap, no token cost) to check the key is valid. Not unit-tested, same boundary treatment as `instagramApiClient.ts`. |
 | `lib/instagramPoller.ts` | Pure normalization functions for the content poller: `normalizeMedia`, `normalizeComment`, `flattenInsights`, `buildMetricSnapshot`, `isActiveStory`, `normalizeFollowerCount`, `shouldFetchDemographics`, `buildDemographicsMetrics`, `dailyHistory` (groups snapshots into one-per-calendar-day, also the fallback for expired stories). Fully unit-tested against fixture Graph API payloads — no network or DB. |
-| `lib/instagramContentClient.ts` | The real Graph API calls (`graph.instagram.com/me/media`, `/{media-id}/comments`, `/me/insights`, `/{media-id}/insights`, `/me` for follower count, demographics breakdown insights). Not unit-tested, same boundary treatment as `instagramApiClient.ts`. |
+| `lib/instagramContentClient.ts` | The real Graph API calls (`graph.instagram.com/me/media`, `/{media-id}/comments`, `/me/insights`, `/{media-id}/insights`, `/me` for follower count, demographics breakdown insights, `POST /{comment-id}/replies` for CM1). Not unit-tested, same boundary treatment as `instagramApiClient.ts`. |
 | `lib/analyticsDashboard.ts` | Pure read-side functions for the analytics dashboard: `buildAccountMetricCharts`/`buildMetricSeries` (per-metric Recharts series from `dailyHistory()` output), `buildMediaTableRows` (attaches latest metric snapshot to each media row), `parseAgeGenderBreakdown`/`parseGeographyBreakdown` (unpack Meta's nested `total_value.breakdowns[].results[]` demographics shape into chart-ready bars). Fully unit-tested against fixture payloads — no network or DB, mirrors the poller/client split (`instagramPoller.ts` = write-side, this = read-side). |
 | `lib/analyticsSummary.ts` | Pure media-engagement/pattern utilities, shared by the unified AI-разбор: `buildMediaEngagements`/`rankMedia` (FEED/REELS only, top/bottom-3 by `total_interactions`), `buildWeekdayPattern`/`buildTimeOfDayPattern` (gated at 3+ samples per bucket), `detectAnomalies` (day deviates >50% from the window average, gated at 4+ data points). No longer owns period selection or metric deltas — that moved to `accountInsights.ts`. Fully unit-tested, no DB access. |
 | `lib/accountInsights.ts` | Pure functions for the unified AI-разбор (supersedes AN3/AN4/GROW1's separate `analysisReport.ts`/`growthInsights.ts`): `buildMediaFormatEngagements`/`buildFormatBreakdown` (engagement per media format, gated at 3+ samples), `buildMetricTrends` (first-half-vs-second-half split of a fixed 90-day window, generalized to **every** account metric — stock `followerCount` compared by last value per half, flow metrics by average per half — not just reach), `buildDemandSignal` (leads grouped by destination, `available: false` when empty), `buildInsightsPrompt`/`parseInsightsContent` (5-field schema: `summary`/`observations`/`gaps`/`direction`/`recommendations`), `shouldSkipManualInsights` (5-minute cooldown), `isInsightsDigestDue` (7-day gate). Fully unit-tested. |
@@ -91,6 +91,8 @@ All application code lives in `app/src`.
 | `lib/leadNotify.ts` | Pure function `buildLeadNotificationText` (LEAD2): formats a `Lead` into the Telegram message text. Fully unit-tested. |
 | `lib/telegramBot.ts` | Pure, dependency-injected `connectTelegramBot` (LEAD2): verifies a bot token via an injected client, then encrypts it — mirrors `claudeApiKey.ts`. Fully unit-tested. |
 | `lib/telegramClient.ts` | The real Telegram Bot API calls (LEAD2): `verifyToken` (`getMe`) and `sendTelegramMessage` (`sendMessage`). Not unit-tested, same boundary treatment as `claudeApiClient.ts`. |
+| `lib/commentReply.ts` | Pure functions for CM1: `buildCommentReplySystemPrompt` (no lead-collection rules, explicitly forbids naming prices or asking for contact info — the reply is a public comment, not a private dialogue), `buildCommentUserMessage`, `parseCommentReplyContent` (simpler `{reply}`-only schema than `leadFields.ts`). Fully unit-tested. |
+| `lib/commentReplyClient.ts` | `generateCommentReply` (CM1): one structured `POST /v1/messages` call to `claude-haiku-4-5-20251001`, same output-tokens-based truncation guard as `agentClient.ts`. Not unit-tested, same boundary treatment as `agentClient.ts`. |
 | `lib/prisma.ts` | Prisma client singleton, constructed with the `@prisma/adapter-pg` driver adapter. |
 | `components/*` | Client components for panel interactivity (forms, toggles, nav) — thin, calling server actions via `useTransition`. |
 
@@ -108,8 +110,13 @@ Prisma models (`app/prisma/schema.prisma`):
   Global rather than per-user: the key powers server-side AI features (analytics,
   content, auto-replies), not a per-account external login like Instagram.
 - **`InstagramMedia`** / **`InstagramComment`** — one row per post/Reel/story
-  and per comment, deduped by their Instagram ID (upsert on poll). Current-state
+  and per comment, deduped by their Instagram ID. Current-state
   entities, not history — engagement counts are overwritten on each poll.
+  `InstagramComment` also carries CM1's reply lifecycle: `replyStatus`
+  (`pending`/`draft_ready`/`sent`/`skipped`/`failed`), `draftReply`,
+  `repliedAt`, `sentReplyId` (the Instagram ID of the reply comment itself,
+  since a reply is a brand-new public comment, not a sub-resource of the
+  original).
 - **`InstagramMetricSnapshot`** — append-only: one row per poll per
   account/media, `scope` (`account`/`media`/`story`/`demographics`) + a
   `metrics` JSON blob + `capturedAt`. Raw timestamped snapshots;
@@ -119,9 +126,12 @@ Prisma models (`app/prisma/schema.prisma`):
   threshold); follower growth is derived from day-over-day `followerCount`
   deltas in `account`-scope snapshots, not a separate metric.
 - **`AgentConfig`** — a singleton row (`singleton: "agent"`) holding the AI
-  agent's tone and rules as free text. One shared config, not per-channel —
-  channel-specific overlays are deferred to the tasks that actually wire up
-  a channel (`CM1`, `DM1`, `WEB5`).
+  agent's tone and rules as free text, plus CM1's `commentToneAndRules`
+  (separate free text — public comment replies need different constraints
+  than a private dialogue) and `commentModerationEnabled` (default `true`).
+  One shared config, not per-channel in general — further channel-specific
+  overlays are deferred to the tasks that wire up the remaining channels
+  (`DM1`, `WEB5`).
 - **`AgentKnowledgeDocument`** — freeform `title`+`body` documents (tour
   catalog, conditions, FAQs). No search/RAG — at this scale every document
   is concatenated straight into the system prompt.
@@ -310,3 +320,51 @@ Prisma models (`app/prisma/schema.prisma`):
   independently in production before the fix was folded into the single
   remaining prompt — telling Claude to ground its answer in the input JSON
   isn't enough; it will parrot the field names back unless told not to.
+- **CM1 (comment auto-replies) uses a separate, simpler generation function
+  (`commentReplyClient.ts`), not `respondAndExtractLead`.** A comment reply
+  is published as a brand-new **public** Instagram comment (there is no
+  private-reply-to-comment endpoint — see the `postCommentReply` note
+  below), so asking for a phone number or contact info the way the private
+  sandbox/DM dialogue does would leak it publicly under the post. Lead
+  collection in comments is out of scope for CM1 by design; a future `CM2`
+  handles handing a comment thread off to DM.
+- **`POST /{comment-id}/replies` creates a new top-level public comment**,
+  it does not thread as a "reply" the way the term suggests — confirmed
+  against Meta's own docs before building `postCommentReply`. There is no
+  Graph API endpoint for a private reply to a comment; that's the reason
+  `CM2` (comment → DM handoff) exists as a separate roadmap item.
+- **New `InstagramComment` rows are inserted via `create` + catch-`P2002`,
+  not `upsert`.** The previous poller used `upsert` (`create` / no-op
+  `update: {}`) purely for dedup; CM1 needs to know whether a row is
+  genuinely new (to decide whether to generate a reply at all), and a
+  `findUnique`-then-`create` check would race across overlapping poll
+  cycles. Catching the unique-constraint violation on `create` keeps the
+  same atomicity `upsert` had while still distinguishing "new" from
+  "already seen" for the caller.
+- **Existing comments are backfilled to `replyStatus: "skipped"` in the
+  CM1 migration itself** (a plain `UPDATE` statement appended to the
+  generated migration SQL), so the auto-reply feature never retroactively
+  replies to a multi-month backlog the moment it ships — only comments
+  collected after the migration runs get a real `pending`→`draft_ready`
+  lifecycle.
+- **CM1 replies to every new comment, unconditionally — no keyword/
+  relevance filtering.** A hardcoded keyword list would be brittle against
+  phrasing the agency can't predict in advance; letting Claude judge
+  relevance per-comment was considered but rejected too, to keep the first
+  version's behavior simple and predictable. Filtering can be layered on
+  later if unconditional replies prove too noisy in practice.
+- **Moderation queue (review-before-publish) is the default, with an
+  admin-facing toggle to switch to fully automatic sending.** Comment
+  replies are public and irreversible-looking once posted; starting with a
+  human-in-the-loop step is the safer default given this session's own
+  experience with model output quality, and the toggle exists specifically
+  so it can be turned off once draft quality is trusted in practice — see
+  `SMM Platform/decisions/cm1-comment-autoreply.md`.
+- **The comment-review queue lives on the pre-existing `/panel/inbox`
+  stub**, not a new page — its placeholder copy already described exactly
+  this ("диалоги по директу, комментариям и чату сайта"), and `DM1` will
+  extend the same page rather than fragment review UIs across channels.
+- **A regenerate action, not a plain reject.** Rejecting a draft with no
+  path forward would just leave staff to answer manually in the Instagram
+  app; letting them ask Claude to try again (same comment, fresh call) was
+  cheap to add and keeps the whole reply loop inside the panel.

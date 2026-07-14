@@ -30,14 +30,18 @@ const PROFILE_NAV_ITEM = { href: "/panel/profile", label: "Профиль", icon
 export function PanelNav({
   direction = "vertical",
   isAdmin = false,
+  pendingCommentCount = 0,
 }: {
   direction?: "vertical" | "horizontal";
   isAdmin?: boolean;
+  pendingCommentCount?: number;
 }) {
   const pathname = usePathname();
 
   const mainItems = MODULE_NAV_ITEMS;
   const secondaryItems = [...(isAdmin ? ADMIN_NAV_ITEMS : []), PROFILE_NAV_ITEM];
+  const badgeFor = (href: string) =>
+    href === "/panel/inbox" && pendingCommentCount > 0 ? pendingCommentCount : null;
 
   if (direction === "horizontal") {
     return (
@@ -45,6 +49,7 @@ export function PanelNav({
         {[...mainItems, ...secondaryItems].map((item) => {
           const isActive = pathname === item.href;
           const Icon = item.icon;
+          const badge = badgeFor(item.href);
           return (
             <Link
               key={item.href}
@@ -58,6 +63,11 @@ export function PanelNav({
             >
               <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
               {item.label}
+              {badge ? (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1 text-xs font-semibold text-accent-foreground">
+                  {badge}
+                </span>
+              ) : null}
             </Link>
           );
         })}
@@ -75,16 +85,22 @@ export function PanelNav({
       {mainItems.map((item) => {
         const isActive = pathname === item.href;
         const Icon = item.icon;
+        const badge = badgeFor(item.href);
         return (
           <Link
             key={item.href}
             href={item.href}
-            title={item.label}
+            title={badge ? `${item.label} (${badge})` : item.label}
             aria-label={item.label}
             aria-current={isActive ? "page" : undefined}
-            className={railButtonClass(isActive)}
+            className={`relative ${railButtonClass(isActive)}`}
           >
             <Icon className="h-[19px] w-[19px]" aria-hidden="true" />
+            {badge ? (
+              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold text-accent-foreground">
+                {badge}
+              </span>
+            ) : null}
           </Link>
         );
       })}
