@@ -125,6 +125,7 @@ export async function register() {
             accessToken,
             mediaId: media.instagramMediaId,
           });
+          console.log(`[instagram-comments-poll] media ${media.instagramMediaId}: fetched ${rawComments.length} comments`);
 
           for (const raw of rawComments) {
             const comment = normalizeComment(raw, media.id);
