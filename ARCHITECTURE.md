@@ -330,9 +330,19 @@ Prisma models (`app/prisma/schema.prisma`):
   handles handing a comment thread off to DM.
 - **`POST /{comment-id}/replies` creates a new top-level public comment**,
   it does not thread as a "reply" the way the term suggests — confirmed
-  against Meta's own docs before building `postCommentReply`. There is no
-  Graph API endpoint for a private reply to a comment; that's the reason
-  `CM2` (comment → DM handoff) exists as a separate roadmap item.
+  against Meta's own docs before building `postCommentReply`. CM1
+  deliberately only uses this public-reply endpoint. UPD (`CM2` research):
+  a separate **Private Reply** endpoint also exists —
+  `POST /<IG_ID>/messages` with `recipient: {comment_id}` — sending one
+  private DM tied to a comment, within 7 days, once per commenter, using
+  the same already-granted `instagram_business_basic` +
+  `instagram_business_manage_comments` scopes (no extra review). Reading
+  the resulting conversation (for continuing the dialogue or detecting a
+  "stop" reply) is a separate concern requiring
+  `instagram_business_manage_messages` and polling
+  `GET /{IG_ID}/conversations` — that's the actual reason `CM2` (comment →
+  DM handoff, dedup, opt-out) is a separate roadmap item from CM1, not
+  because no private-reply mechanism exists at all.
 - **New `InstagramComment` rows are inserted via `create` + catch-`P2002`,
   not `upsert`.** The previous poller used `upsert` (`create` / no-op
   `update: {}`) purely for dedup; CM1 needs to know whether a row is
@@ -368,3 +378,21 @@ Prisma models (`app/prisma/schema.prisma`):
   path forward would just leave staff to answer manually in the Instagram
   app; letting them ask Claude to try again (same comment, fresh call) was
   cheap to add and keeps the whole reply loop inside the panel.
+- **A permission being requested in the OAuth scope string is not the same
+  as it being usable.** CM1's `GET /{media-id}/comments` silently returned
+  `{"data": []}` for every post in production — including posts already
+  known to have comments — even though `instagram_business_manage_comments`
+  was in `TRACK_A_SCOPES` and the token exchange succeeded. Root cause
+  (found via the Meta App Dashboard, Сценарии использования → Разрешения
+  и функции): the permission itself had never been **added** to the app's
+  Instagram use case there (shown as "—" / "Добавить" instead of "Готово к
+  тестированию", despite already-accumulating call counts). A second,
+  distinct gate exists **as long as the app is unpublished
+  ("Не опубликовано")**: Graph API only returns data tied to interactions
+  from accounts that hold an *accepted* Instagram Tester role — visible
+  under Роли в приложении → Роли as a "0 of N" counter even when a tester
+  is listed, if their invite was never accepted from inside the Instagram
+  app itself (Settings → Apps and websites → Приглашения для
+  тестировщиков). Any future Instagram data-reading feature (`CM2`,
+  `DM1`+) that stalls with an empty-but-200-OK response should check both
+  of these before suspecting the application code.
