@@ -15,7 +15,10 @@ import { PeriodSelector } from "@/components/PeriodSelector";
 import { SummaryPanel } from "@/components/SummaryPanel";
 import { AnalysisTrigger } from "@/components/AnalysisTrigger";
 import { AnalysisReportsList } from "@/components/AnalysisReportsList";
+import { GrowthInsightTrigger } from "@/components/GrowthInsightTrigger";
+import { GrowthInsightsList } from "@/components/GrowthInsightsList";
 import type { AnalysisContent } from "@/lib/analysisReport";
+import type { GrowthInsightContent } from "@/lib/growthInsights";
 
 const VALID_PRESETS: PeriodPreset[] = ["7d", "30d", "90d", "custom"];
 
@@ -126,6 +129,12 @@ export default async function AnalyticsPage({
     select: { id: true, trigger: true, periodFrom: true, periodTo: true, createdAt: true, content: true },
   });
 
+  const growthInsightReports = await prisma.growthInsightReport.findMany({
+    where: { accountId: selectedAccount.id },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, trigger: true, periodFrom: true, periodTo: true, createdAt: true, content: true },
+  });
+
   return (
     <div className="p-6 sm:p-8 sm:px-10">
       <div className="flex flex-col items-start gap-4 sm:flex-row sm:flex-wrap sm:justify-between">
@@ -176,6 +185,24 @@ export default async function AnalyticsPage({
           reports={analysisReports.map((report) => ({
             ...report,
             content: report.content as unknown as AnalysisContent,
+          }))}
+        />
+      </div>
+
+      <h2 className="mt-9 text-[13.5px] font-semibold text-foreground">Узкие места и направление роста</h2>
+      <p className="mt-1 max-w-[640px] text-[12.5px] leading-relaxed text-muted-foreground">
+        Независимый стратегический разбор на фиксированном 90-дневном окне: вовлечённость по
+        форматам, тренд охвата и (когда появятся) разрыв между спросом из заявок и контентом.
+        Ежемесячный дайджест формируется автоматически.
+      </p>
+      <div className="mt-3">
+        <GrowthInsightTrigger accountId={selectedAccount.id} />
+      </div>
+      <div className="mt-4 max-w-[1020px]">
+        <GrowthInsightsList
+          reports={growthInsightReports.map((report) => ({
+            ...report,
+            content: report.content as unknown as GrowthInsightContent,
           }))}
         />
       </div>

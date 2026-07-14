@@ -41,6 +41,7 @@ model InstagramAccount {
   media            InstagramMedia[]
   metricSnapshots  InstagramMetricSnapshot[]
   aiAnalysisReports AiAnalysisReport[]
+  growthInsightReports GrowthInsightReport[]
 
   @@map("instagram_accounts")
 }
@@ -103,6 +104,19 @@ model AiAnalysisReport {
   createdAt   DateTime @default(now())
 
   @@map("ai_analysis_reports")
+}
+
+model GrowthInsightReport {
+  id          String   @id @default(cuid())
+  accountId   String
+  account     InstagramAccount @relation(fields: [accountId], references: [id])
+  periodFrom  DateTime
+  periodTo    DateTime
+  trigger     String
+  content     Json
+  createdAt   DateTime @default(now())
+
+  @@map("growth_insight_reports")
 }
 
 model ClaudeApiKeyConfig {
