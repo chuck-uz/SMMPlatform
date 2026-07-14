@@ -68,7 +68,7 @@ All application code lives in `app/src`.
 | `app/api/auth/[...nextauth]/route.ts` | NextAuth's own route handlers. |
 | `app/api/instagram/authorize/route.ts` | Redirects to Instagram's OAuth authorize URL (Track A scopes only), sets a CSRF `state` cookie. |
 | `app/api/instagram/callback/route.ts` | Validates `state`, exchanges the code for a long-lived token via `instagramOAuth.ts`, stores it encrypted. |
-| `app/panel/*` | Server-rendered panel pages: `connections`, `users` (admin-only), `profile`, `analytics` (multi-account charts/table/demographics), plus stubs for modules not yet built (`inbox`, `content`, `scenarios`). Each mutable page pairs with an `actions.ts` (server actions). |
+| `app/panel/*` | Server-rendered panel pages: `connections`, `users` (admin-only), `profile`, `analytics` (multi-account charts/table/demographics), `scenarios` (admin-only AI agent core: tone, knowledge base, examples, sandbox), plus stubs for modules not yet built (`inbox`, `content`). Each mutable page pairs with an `actions.ts` (server actions). |
 | `lib/instagramOAuth.ts` | Pure, dependency-injected OAuth orchestration: `buildAuthorizeUrl`, `connectInstagramAccount`, `refreshAccountToken`, `daysUntilExpiry`. The real Instagram API calls are injected as an `InstagramApiClient`, so this is fully unit-tested without hitting the network. |
 | `lib/instagramApiClient.ts` | The real `InstagramApiClient` implementation (`fetch` calls to `api.instagram.com` / `graph.instagram.com`). Not unit-tested — same boundary treatment as `prisma.ts`. |
 | `lib/encryption.ts` | AES-256-GCM `encrypt`/`decrypt`, key passed as a parameter (never read from `process.env` inside the function) — used to store the Instagram access token. |
@@ -83,6 +83,9 @@ All application code lives in `app/src`.
 | `lib/analyticsSummary.ts` | Pure functions for the period summary (data prep for the AN4 AI analysis): `resolvePeriodRange` (preset or custom → current + equal-length previous range), `buildMetricDeltas` (flow metrics summed, the `followerCount` stock metric compared by last value), `rankMedia`/`buildWeekdayPattern`/`buildTimeOfDayPattern` (FEED/REELS only, ranked by `total_interactions`, time buckets gated at 3+ samples), `detectAnomalies` (day deviates >50% from the period average, gated at 4+ data points). Fully unit-tested, no DB access. |
 | `lib/analysisReport.ts` | Pure functions for the AI analysis feature (AN4): `serializeSummaryForPrompt`/`buildAnalysisPrompt` (turn a `PeriodSummary` into the prompt sent to Claude), `shouldSkipManualAnalysis` (5-minute cooldown per account+period), `isDigestDue` (7-day gate for the weekly digest), `parseAnalysisContent` (defensive validation of Claude's structured response). Fully unit-tested. |
 | `lib/claudeAnalysisClient.ts` | The real call to `claude-sonnet-5` (`POST /v1/messages` via `fetch`, matching `claudeApiClient.ts`'s boundary treatment) with `output_config.format` (JSON Schema: `summary`/`observations`/`recommendations`) and an anti-hallucination system prompt. Not unit-tested. |
+| `lib/agentPrompt.ts` | Pure functions for the AI agent core (AG1): `buildSystemPrompt` (assembles tone/rules + knowledge base documents + example dialogues into one system prompt; the no-prices/no-closing-deals rule is always baked in, not admin-editable), `buildConversationMessages` (dialogue turns → Claude's `user`/`assistant` message array). Fully unit-tested. |
+| `lib/agentSandbox.ts` | Pure function `canSaveAsExample` (AG1): blocks saving a sandbox dialogue as a reusable example if any agent turn in it was rated 👎. Fully unit-tested. |
+| `lib/agentClient.ts` | The real call to `claude-haiku-4-5-20251001` (`POST /v1/messages` via `fetch`) for the agent's conversational replies — no tool use, no structured output, just a plain text response. Not unit-tested, same boundary treatment as `claudeAnalysisClient.ts`. |
 | `lib/prisma.ts` | Prisma client singleton, constructed with the `@prisma/adapter-pg` driver adapter. |
 | `components/*` | Client components for panel interactivity (forms, toggles, nav) — thin, calling server actions via `useTransition`. |
 
@@ -114,6 +117,21 @@ Prisma models (`app/prisma/schema.prisma`):
   (`trigger`: `manual`/`weekly`, `content` JSON: `summary`/`observations`/
   `recommendations`, `periodFrom`/`periodTo`). Never overwritten — past
   reports stay visible in the panel.
+- **`AgentConfig`** — a singleton row (`singleton: "agent"`) holding the AI
+  agent's tone and rules as free text. One shared config, not per-channel —
+  channel-specific overlays are deferred to the tasks that actually wire up
+  a channel (`CM1`, `DM1`, `WEB5`).
+- **`AgentKnowledgeDocument`** — freeform `title`+`body` documents (tour
+  catalog, conditions, FAQs). No search/RAG — at this scale every document
+  is concatenated straight into the system prompt.
+- **`AgentExampleDialogue`** — full multi-turn dialogues (`turns` JSON:
+  `{role, content}[]`) used as few-shot examples in the system prompt.
+  Promoted from a sandbox session once every agent turn in it has been
+  rated 👍 (or left unrated) — never if any turn was rated 👎.
+- **`AgentSandboxSession`** — a draft conversation (`turns` JSON, per-turn
+  `rating`, `status`: `draft`/`saved`) persisted to the DB from the first
+  message, not just client-side React state — a page reload doesn't lose
+  test progress.
 
 ## 5. Key decisions
 
@@ -180,3 +198,17 @@ Prisma models (`app/prisma/schema.prisma`):
   every 6 hours whether the last `weekly` report for an account is 7+ days
   old — same "no extra scheduler" reasoning as the other pollers, and avoids
   timezone/DST edge cases for a single weekly email-equivalent.
+- **The AI agent (AG1) replies with a single plain `messages.create` call,
+  no tool use.** The whole context (system prompt + full conversation
+  history) is sent on every turn; there's no need for the model to fetch
+  anything mid-turn since the knowledge base is small enough to live in the
+  prompt directly.
+- **Full multi-turn dialogues as examples, not single exchange pairs.**
+  A deliberate choice during AG1's design: storing the whole dialogue (not
+  just one client-message/agent-reply pair) preserves conversational flow
+  as a few-shot pattern, at the cost of per-turn (not per-dialogue) 👍/👎
+  rating to decide whether the dialogue is eligible to be saved at all.
+- **`/panel/scenarios` (the AI agent core) is admin-only**, same as
+  `/panel/users` — it's a system-wide configuration of the bot's behavior,
+  not a manager's day-to-day tool. The nav item was moved out of the shared
+  module list into the admin-gated section of `PanelNav`.

@@ -20,6 +20,7 @@ Two core points: **(1)** consultation and lead capture, **(2)** promotion and ac
 - **Analytics dashboard** — an "Analytics" section with a switcher between connected accounts: trend charts for every collected account metric, a sortable publications table, and audience demographics (age/gender, top countries); low-data states show clear placeholders instead of empty charts.
 - **Period summary** — pick a period (7/30/90-day presets or a custom range) and the platform computes key-metric changes vs. the prior period, best/worst publications, weekday/time-of-day patterns, and anomalies.
 - **AI analysis of the summary** — Claude (Sonnet) breaks down the summary on demand or automatically once a week: summary → observations → recommendations, grounded only in the data actually collected, with no fabricated numbers.
+- **AI agent core** — an admin sets the agent's tone/rules, a knowledge base of tours, and reference example dialogues; a sandbox lets you test replies (Claude Haiku) and rate them 👍/👎 before they reach real channels.
 - **Uptime monitoring** — an automated check every 10 minutes, with an email alert on downtime.
 
 The full roadmap (Instagram analytics, an AI agent for DMs and comments, lead intake and tracking, content publishing, the agency's own website) lives on the interactive roadmap site: **[roadmap-platform.oresh.in](https://roadmap-platform.oresh.in)**.
