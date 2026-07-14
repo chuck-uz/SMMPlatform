@@ -6,7 +6,7 @@ const COMMENT_FIELDS = "id,text,username,timestamp";
 const ACCOUNT_METRICS = "reach,profile_views,accounts_engaged,total_interactions,website_clicks";
 const MEDIA_METRICS: Record<string, string> = {
   FEED: "reach,likes,comments,saved,shares,total_interactions",
-  REELS: "reach,likes,comments,saved,shares,plays,total_interactions",
+  REELS: "reach,likes,comments,saved,shares,views,total_interactions",
   STORY: "reach,replies,taps_forward,taps_back,exits",
 };
 
