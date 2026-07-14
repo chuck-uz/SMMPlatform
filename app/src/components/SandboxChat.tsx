@@ -8,7 +8,7 @@ import {
   saveSandboxSessionAsExampleAction,
   sendSandboxMessageAction,
 } from "@/app/panel/scenarios/actions";
-import { canSaveAsExample, type SandboxTurn } from "@/lib/agentSandbox";
+import { canSaveAsExample, DEFAULT_SANDBOX_MODEL, SANDBOX_MODEL_OPTIONS, type SandboxTurn } from "@/lib/agentSandbox";
 import { isLeadComplete, type LeadFields } from "@/lib/leadFields";
 
 const EMPTY_LEAD_FIELDS: LeadFields = {
@@ -33,14 +33,17 @@ export function SandboxChat({
   initialSessionId,
   initialTurns,
   initialLeadFields,
+  initialModel,
 }: {
   initialSessionId: string | null;
   initialTurns: SandboxTurn[];
   initialLeadFields: LeadFields;
+  initialModel: string;
 }) {
   const [sessionId, setSessionId] = useState(initialSessionId);
   const [turns, setTurns] = useState<SandboxTurn[]>(initialTurns);
   const [leadFields, setLeadFields] = useState<LeadFields>(initialLeadFields);
+  const [model, setModel] = useState(initialModel);
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -54,7 +57,7 @@ export function SandboxChat({
     setMessage("");
     startTransition(async () => {
       try {
-        const result = await sendSandboxMessageAction({ sessionId, message: text });
+        const result = await sendSandboxMessageAction({ sessionId, message: text, model });
         setSessionId(result.sessionId);
         setTurns(result.turns);
         setLeadFields(result.leadFields);
@@ -81,6 +84,7 @@ export function SandboxChat({
         setSessionId(null);
         setTurns([]);
         setLeadFields(EMPTY_LEAD_FIELDS);
+        setModel(DEFAULT_SANDBOX_MODEL);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Не удалось сохранить пример");
       }
@@ -91,6 +95,7 @@ export function SandboxChat({
     if (!sessionId) {
       setTurns([]);
       setLeadFields(EMPTY_LEAD_FIELDS);
+      setModel(DEFAULT_SANDBOX_MODEL);
       return;
     }
     startTransition(async () => {
@@ -98,6 +103,7 @@ export function SandboxChat({
       setSessionId(null);
       setTurns([]);
       setLeadFields(EMPTY_LEAD_FIELDS);
+      setModel(DEFAULT_SANDBOX_MODEL);
     });
   }
 
@@ -179,6 +185,24 @@ export function SandboxChat({
       ) : null}
 
       <div className="border-t border-border p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <label htmlFor="sandbox-model" className="text-[11.5px] font-medium text-subtle">
+            Модель
+          </label>
+          <select
+            id="sandbox-model"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            disabled={isPending}
+            className="rounded-sm border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {SANDBOX_MODEL_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="flex gap-2">
           <input
             type="text"

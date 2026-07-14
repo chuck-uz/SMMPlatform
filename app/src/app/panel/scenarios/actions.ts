@@ -7,7 +7,12 @@ import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/encryption";
 import { respondAndExtractLead } from "@/lib/agentClient";
 import { buildConversationMessages, buildSystemPrompt } from "@/lib/agentPrompt";
-import { buildExampleDialogueTurns, canSaveAsExample, type SandboxTurn } from "@/lib/agentSandbox";
+import {
+  buildExampleDialogueTurns,
+  canSaveAsExample,
+  isValidSandboxModel,
+  type SandboxTurn,
+} from "@/lib/agentSandbox";
 import { isLeadComplete } from "@/lib/leadFields";
 
 async function requireAdmin() {
@@ -81,8 +86,16 @@ async function requireClaudeApiKey(encryptionKey: string) {
   return decrypt(claudeConfig.encryptedApiKey, encryptionKey);
 }
 
-export async function sendSandboxMessageAction(params: { sessionId: string | null; message: string }) {
+export async function sendSandboxMessageAction(params: {
+  sessionId: string | null;
+  message: string;
+  model: string;
+}) {
   await requireAdmin();
+
+  if (!isValidSandboxModel(params.model)) {
+    throw new Error("Неизвестная модель");
+  }
 
   const encryptionKey = process.env.ENCRYPTION_KEY;
   if (!encryptionKey) {
@@ -102,7 +115,12 @@ export async function sendSandboxMessageAction(params: { sessionId: string | nul
 
   const systemPrompt = await buildCurrentSystemPrompt();
   const conversationMessages = buildConversationMessages(turnsWithClientMessage);
-  const { reply, fields } = await respondAndExtractLead(apiKey, systemPrompt, conversationMessages);
+  const { reply, fields } = await respondAndExtractLead(
+    apiKey,
+    systemPrompt,
+    conversationMessages,
+    params.model,
+  );
 
   const updatedTurns: SandboxTurn[] = [
     ...turnsWithClientMessage,
@@ -114,10 +132,12 @@ export async function sendSandboxMessageAction(params: { sessionId: string | nul
     create: {
       turns: updatedTurns as unknown as Prisma.InputJsonValue,
       leadFields: fields as unknown as Prisma.InputJsonValue,
+      model: params.model,
     },
     update: {
       turns: updatedTurns as unknown as Prisma.InputJsonValue,
       leadFields: fields as unknown as Prisma.InputJsonValue,
+      model: params.model,
     },
   });
 

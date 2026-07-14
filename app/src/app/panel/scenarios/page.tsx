@@ -4,7 +4,7 @@ import { ScenarioEditor } from "@/components/ScenarioEditor";
 import { KnowledgeBaseList } from "@/components/KnowledgeBaseList";
 import { ExamplesList } from "@/components/ExamplesList";
 import { SandboxChat } from "@/components/SandboxChat";
-import type { SandboxTurn } from "@/lib/agentSandbox";
+import { DEFAULT_SANDBOX_MODEL, type SandboxTurn } from "@/lib/agentSandbox";
 import type { DialogueTurn } from "@/lib/agentPrompt";
 import type { LeadFields } from "@/lib/leadFields";
 
@@ -77,6 +77,7 @@ export default async function ScenariosPage() {
           initialSessionId={draftSession?.id ?? null}
           initialTurns={(draftSession?.turns as unknown as SandboxTurn[]) ?? []}
           initialLeadFields={(draftSession?.leadFields as unknown as LeadFields) ?? EMPTY_LEAD_FIELDS}
+          initialModel={draftSession?.model ?? DEFAULT_SANDBOX_MODEL}
         />
       </div>
     </div>

@@ -2,7 +2,6 @@ import { parseAgentReplyContent, type AgentReplyContent } from "./leadFields";
 
 const MESSAGES_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
-const MODEL = "claude-haiku-4-5-20251001";
 
 const REPLY_OUTPUT_SCHEMA = {
   type: "object",
@@ -30,6 +29,7 @@ export async function respondAndExtractLead(
   apiKey: string,
   systemPrompt: string,
   messages: Array<{ role: "user" | "assistant"; content: string }>,
+  model: string,
 ): Promise<AgentReplyContent> {
   const startedAt = Date.now();
   const response = await fetch(MESSAGES_URL, {
@@ -40,7 +40,7 @@ export async function respondAndExtractLead(
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: MODEL,
+      model,
       max_tokens: 1024,
       system: systemPrompt,
       messages,
