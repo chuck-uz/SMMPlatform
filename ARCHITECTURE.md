@@ -77,8 +77,8 @@ All application code lives in `app/src`.
 | `lib/verifyCredentials.ts`, `changePassword.ts`, `createUser.ts`, `setUserActive.ts` | Panel auth/user-management business logic, each paired with a `.test.ts`. |
 | `lib/claudeApiKey.ts` | Pure, dependency-injected logic for saving the platform's Claude API key: verifies it against the real API, then encrypts it. The verification client is injected (`ClaudeApiClient`), so this is unit-tested without a real key or network call. |
 | `lib/claudeApiClient.ts` | The real `ClaudeApiClient` implementation — calls Anthropic's `GET /v1/models` (cheap, no token cost) to check the key is valid. Not unit-tested, same boundary treatment as `instagramApiClient.ts`. |
-| `lib/instagramPoller.ts` | Pure normalization functions for the content poller: `normalizeMedia`, `normalizeComment`, `flattenInsights`, `buildMetricSnapshot`, `isActiveStory`. Fully unit-tested against fixture Graph API payloads — no network or DB. |
-| `lib/instagramContentClient.ts` | The real Graph API calls (`graph.instagram.com/me/media`, `/{media-id}/comments`, `/me/insights`, `/{media-id}/insights`). Not unit-tested, same boundary treatment as `instagramApiClient.ts`. |
+| `lib/instagramPoller.ts` | Pure normalization functions for the content poller: `normalizeMedia`, `normalizeComment`, `flattenInsights`, `buildMetricSnapshot`, `isActiveStory`, `normalizeFollowerCount`, `shouldFetchDemographics`, `buildDemographicsMetrics`, `dailyHistory` (groups snapshots into one-per-calendar-day, also the fallback for expired stories). Fully unit-tested against fixture Graph API payloads — no network or DB. |
+| `lib/instagramContentClient.ts` | The real Graph API calls (`graph.instagram.com/me/media`, `/{media-id}/comments`, `/me/insights`, `/{media-id}/insights`, `/me` for follower count, demographics breakdown insights). Not unit-tested, same boundary treatment as `instagramApiClient.ts`. |
 | `lib/prisma.ts` | Prisma client singleton, constructed with the `@prisma/adapter-pg` driver adapter. |
 | `components/*` | Client components for panel interactivity (forms, toggles, nav) — thin, calling server actions via `useTransition`. |
 
@@ -99,9 +99,13 @@ Prisma models (`app/prisma/schema.prisma`):
   and per comment, deduped by their Instagram ID (upsert on poll). Current-state
   entities, not history — engagement counts are overwritten on each poll.
 - **`InstagramMetricSnapshot`** — append-only: one row per poll per
-  account/media, `scope` (`account`/`media`/`story`) + a `metrics` JSON blob +
-  `capturedAt`. Raw timestamped snapshots; `AN1` builds trend history on top
-  of these rather than this table itself being the history.
+  account/media, `scope` (`account`/`media`/`story`/`demographics`) + a
+  `metrics` JSON blob + `capturedAt`. Raw timestamped snapshots;
+  `dailyHistory()` turns these into one-per-day trend points on read, rather
+  than this table itself being pre-aggregated history. `demographics`
+  snapshots only exist once the account has 100+ followers (Meta's own
+  threshold); follower growth is derived from day-over-day `followerCount`
+  deltas in `account`-scope snapshots, not a separate metric.
 
 ## 5. Key decisions
 
@@ -130,3 +134,9 @@ Prisma models (`app/prisma/schema.prisma`):
   IG3 poller against a real connected account — media-level and comment-level
   calls (`/{media-id}/...`) are unaffected since they address the object's own
   ID, not the account's.
+- **Graph API metric names drift between versions without notice.** A live
+  deploy of AN1's Reels insights call failed with `metric[5] must be one of
+  the following values: ...` — `plays` had been renamed to `views`. The error
+  message lists the full valid metric set for that media type, which is the
+  fastest way to fix it; treat any new insights metric added here as
+  unverified until it's been exercised against a real account at least once.
