@@ -2,7 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { TrashIcon } from "@heroicons/react/24/outline";
-import { addTelegramRecipientAction, removeTelegramRecipientAction } from "@/app/panel/connections/actions";
+import {
+  addTelegramRecipientAction,
+  removeTelegramRecipientAction,
+  sendTestTelegramMessageAction,
+} from "@/app/panel/connections/actions";
 
 export interface TelegramRecipientItem {
   id: string;
@@ -14,7 +18,25 @@ export function TelegramRecipientsList({ recipients }: { recipients: TelegramRec
   const [chatId, setChatId] = useState("");
   const [label, setLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  function handleSendTest() {
+    setError(null);
+    setTestResult(null);
+    startTransition(async () => {
+      try {
+        const { sent, failed } = await sendTestTelegramMessageAction();
+        setTestResult(
+          failed === 0
+            ? `Отправлено ${sent} из ${sent}`
+            : `Отправлено ${sent} из ${sent + failed}, ${failed} не удалось`,
+        );
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Не удалось отправить тестовое сообщение");
+      }
+    });
+  }
 
   function handleAdd() {
     setError(null);
@@ -42,29 +64,42 @@ export function TelegramRecipientsList({ recipients }: { recipients: TelegramRec
           Получателей пока нет — добавьте chat_id ниже, чтобы уведомления о новых заявках приходили в Telegram.
         </div>
       ) : (
-        <div className="rounded-[10px] border border-border bg-background">
-          {recipients.map((recipient) => (
-            <div
-              key={recipient.id}
-              className="flex items-center justify-between gap-4 border-t border-border px-4 py-2.5 first:border-t-0"
-            >
-              <div className="min-w-0">
-                <span className="text-[13px] font-medium text-foreground">{recipient.chatId}</span>
-                {recipient.label ? (
-                  <span className="ml-2 text-[12px] text-muted-foreground">{recipient.label}</span>
-                ) : null}
-              </div>
-              <button
-                type="button"
-                onClick={() => handleDelete(recipient.id)}
-                aria-label="Удалить получателя"
-                className="cursor-pointer rounded-sm p-1.5 text-subtle transition-colors duration-200 hover:bg-destructive/10 hover:text-destructive"
+        <>
+          <div className="rounded-[10px] border border-border bg-background">
+            {recipients.map((recipient) => (
+              <div
+                key={recipient.id}
+                className="flex items-center justify-between gap-4 border-t border-border px-4 py-2.5 first:border-t-0"
               >
-                <TrashIcon className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-          ))}
-        </div>
+                <div className="min-w-0">
+                  <span className="text-[13px] font-medium text-foreground">{recipient.chatId}</span>
+                  {recipient.label ? (
+                    <span className="ml-2 text-[12px] text-muted-foreground">{recipient.label}</span>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(recipient.id)}
+                  aria-label="Удалить получателя"
+                  className="cursor-pointer rounded-sm p-1.5 text-subtle transition-colors duration-200 hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <TrashIcon className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleSendTest}
+              disabled={isPending}
+              className="cursor-pointer rounded-sm border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors duration-200 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isPending ? "Отправляем…" : "Отправить тестовое сообщение"}
+            </button>
+            {testResult ? <span className="text-xs text-accent">{testResult}</span> : null}
+          </div>
+        </>
       )}
 
       <div className="flex flex-col gap-2 sm:flex-row">

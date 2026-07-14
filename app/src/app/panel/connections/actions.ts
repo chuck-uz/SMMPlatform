@@ -6,8 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { connectClaudeApiKey } from "@/lib/claudeApiKey";
 import { claudeApiClient } from "@/lib/claudeApiClient";
 import { connectTelegramBot } from "@/lib/telegramBot";
-import { telegramBotClient } from "@/lib/telegramClient";
-import { encrypt } from "@/lib/encryption";
+import { telegramBotClient, sendTelegramMessage } from "@/lib/telegramClient";
+import { encrypt, decrypt } from "@/lib/encryption";
 
 export async function disconnectInstagramAccountAction(accountId: string) {
   const session = await auth();
@@ -111,4 +111,39 @@ export async function removeTelegramRecipientAction(id: string) {
   await prisma.telegramNotificationRecipient.delete({ where: { id } });
 
   revalidatePath("/panel/connections");
+}
+
+export async function sendTestTelegramMessageAction() {
+  await requireAdmin();
+
+  const encryptionKey = process.env.ENCRYPTION_KEY;
+  if (!encryptionKey) {
+    throw new Error("ENCRYPTION_KEY не настроен на сервере");
+  }
+
+  const botConfig = await prisma.telegramBotConfig.findUnique({ where: { singleton: "telegram" } });
+  if (!botConfig?.verified) {
+    throw new Error("Сначала сохраните и проверьте токен бота");
+  }
+
+  const recipients = await prisma.telegramNotificationRecipient.findMany();
+  if (recipients.length === 0) {
+    throw new Error("В white list пока нет получателей");
+  }
+
+  const botToken = decrypt(botConfig.encryptedBotToken, encryptionKey);
+  const text = "🔔 Тестовое уведомление от SMM Platform. Если вы это видите — рассылка настроена верно.";
+
+  let sent = 0;
+  let failed = 0;
+  for (const recipient of recipients) {
+    try {
+      await sendTelegramMessage(botToken, recipient.chatId, text);
+      sent += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+
+  return { sent, failed };
 }
