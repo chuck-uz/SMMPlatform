@@ -7,6 +7,7 @@ const MEDIA_POLL_INTERVAL_MS = 15 * 60 * 1000;
 const COMMENTS_POLL_INTERVAL_MS = 5 * 60 * 1000;
 const METRICS_POLL_INTERVAL_MS = 2 * 60 * 60 * 1000;
 const STORY_METRICS_POLL_INTERVAL_MS = 60 * 60 * 1000;
+const DIGEST_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
@@ -24,8 +25,12 @@ export async function register() {
     normalizeFollowerCount,
     shouldFetchDemographics,
     buildDemographicsMetrics,
+    dailyHistory,
   } = await import("@/lib/instagramPoller");
   const { encrypt, decrypt } = await import("@/lib/encryption");
+  const { resolvePeriodRange, buildPeriodSummary } = await import("@/lib/analyticsSummary");
+  const { buildAnalysisPrompt, isDigestDue } = await import("@/lib/analysisReport");
+  const { analyzeSummary } = await import("@/lib/claudeAnalysisClient");
 
   async function refreshExpiringTokens() {
     const encryptionKey = process.env.ENCRYPTION_KEY;
@@ -210,6 +215,90 @@ export async function register() {
     }
   }
 
+  async function runWeeklyDigest() {
+    const encryptionKey = process.env.ENCRYPTION_KEY;
+    if (!encryptionKey) return;
+
+    const claudeConfig = await prisma.claudeApiKeyConfig.findUnique({ where: { singleton: "claude" } });
+    if (!claudeConfig?.verified) return;
+
+    const now = new Date();
+    const accounts = await prisma.instagramAccount.findMany();
+
+    for (const account of accounts) {
+      try {
+        const lastWeeklyReport = await prisma.aiAnalysisReport.findFirst({
+          where: { accountId: account.id, trigger: "weekly" },
+          orderBy: { createdAt: "desc" },
+          select: { createdAt: true },
+        });
+        if (!isDigestDue(lastWeeklyReport, now)) continue;
+
+        const range = resolvePeriodRange({ preset: "7d" }, now);
+
+        const media = await prisma.instagramMedia.findMany({
+          where: { accountId: account.id },
+          select: { id: true, caption: true, mediaProductType: true, postedAt: true },
+        });
+        const [accountSnapshots, mediaSnapshots] = await Promise.all([
+          prisma.instagramMetricSnapshot.findMany({
+            where: { accountId: account.id, scope: "account" },
+            select: { capturedAt: true, metrics: true },
+            orderBy: { capturedAt: "asc" },
+          }),
+          prisma.instagramMetricSnapshot.findMany({
+            where: {
+              accountId: account.id,
+              mediaId: { in: media.map((item) => item.id) },
+              scope: { in: ["media", "story"] },
+            },
+            select: { mediaId: true, capturedAt: true, metrics: true },
+            orderBy: { capturedAt: "desc" },
+          }),
+        ]);
+
+        const latestMetricsByMediaId = new Map<string, Record<string, unknown>>();
+        for (const snapshot of mediaSnapshots) {
+          if (snapshot.mediaId && !latestMetricsByMediaId.has(snapshot.mediaId)) {
+            latestMetricsByMediaId.set(snapshot.mediaId, snapshot.metrics as Record<string, unknown>);
+          }
+        }
+
+        const dailyPoints = dailyHistory(
+          accountSnapshots.map((snapshot) => ({
+            capturedAt: snapshot.capturedAt,
+            metrics: snapshot.metrics as Record<string, unknown>,
+          })),
+        );
+        const currentPoints = dailyPoints.filter((point) => {
+          const date = new Date(point.date);
+          return date >= range.from && date <= range.to;
+        });
+        const previousPoints = dailyPoints.filter((point) => {
+          const date = new Date(point.date);
+          return date >= range.previousFrom && date <= range.previousTo;
+        });
+
+        const summary = buildPeriodSummary({ range, currentPoints, previousPoints, media, latestMetricsByMediaId });
+        const prompt = buildAnalysisPrompt(summary);
+        const apiKey = decrypt(claudeConfig.encryptedApiKey, encryptionKey);
+        const content = await analyzeSummary(apiKey, prompt);
+
+        await prisma.aiAnalysisReport.create({
+          data: {
+            accountId: account.id,
+            periodFrom: range.from,
+            periodTo: range.to,
+            trigger: "weekly",
+            content: content as unknown as Prisma.InputJsonValue,
+          },
+        });
+      } catch (error) {
+        console.error(`[weekly-digest] failed for account ${account.id}`, error);
+      }
+    }
+  }
+
   setInterval(refreshExpiringTokens, TOKEN_CHECK_INTERVAL_MS);
   void refreshExpiringTokens();
 
@@ -224,4 +313,7 @@ export async function register() {
 
   setInterval(pollStoryMetrics, STORY_METRICS_POLL_INTERVAL_MS);
   void pollStoryMetrics();
+
+  setInterval(runWeeklyDigest, DIGEST_CHECK_INTERVAL_MS);
+  void runWeeklyDigest();
 }
