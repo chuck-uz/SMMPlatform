@@ -58,7 +58,9 @@ export async function analyzeAccountInsights(apiKey: string, prompt: string): Pr
   });
 
   if (!response.ok) {
-    throw new Error(`Claude API error ${response.status}: ${await response.text()}`);
+    const bodyText = await response.text();
+    const detail = bodyText.trim().startsWith("<") ? "upstream returned an error page, not JSON" : bodyText.slice(0, 500);
+    throw new Error(`Claude API error ${response.status}: ${detail}`);
   }
 
   const data = await response.json();

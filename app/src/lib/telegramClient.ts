@@ -19,6 +19,8 @@ export async function sendTelegramMessage(botToken: string, chatId: string, text
   });
 
   if (!response.ok) {
-    throw new Error(`Telegram API error ${response.status}: ${await response.text()}`);
+    const bodyText = await response.text();
+    const detail = bodyText.trim().startsWith("<") ? "upstream returned an error page, not JSON" : bodyText.slice(0, 500);
+    throw new Error(`Telegram API error ${response.status}: ${detail}`);
   }
 }
