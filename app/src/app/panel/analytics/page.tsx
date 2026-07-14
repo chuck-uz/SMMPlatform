@@ -6,30 +6,37 @@ import {
   parseAgeGenderBreakdown,
   parseGeographyBreakdown,
 } from "@/lib/analyticsDashboard";
-import { resolvePeriodRange, buildPeriodSummary, type PeriodPreset } from "@/lib/analyticsSummary";
+import {
+  buildMediaEngagements,
+  rankMedia,
+  buildWeekdayPattern,
+  buildTimeOfDayPattern,
+  detectAnomalies,
+} from "@/lib/analyticsSummary";
+import {
+  buildMediaFormatEngagements,
+  buildFormatBreakdown,
+  buildMetricTrends,
+  buildDemandSignal,
+} from "@/lib/accountInsights";
 import { AccountSelector } from "@/components/AccountSelector";
 import { ANALYTICS_TABS, AnalyticsTabs } from "@/components/AnalyticsTabs";
 import { AnalyticsCharts } from "@/components/AnalyticsCharts";
 import { MediaTable } from "@/components/MediaTable";
 import { DemographicsBlock } from "@/components/DemographicsBlock";
-import { PeriodSelector } from "@/components/PeriodSelector";
-import { SummaryPanel } from "@/components/SummaryPanel";
-import { AnalysisTrigger } from "@/components/AnalysisTrigger";
-import { AnalysisReportsList } from "@/components/AnalysisReportsList";
-import { GrowthInsightTrigger } from "@/components/GrowthInsightTrigger";
-import { GrowthInsightsList } from "@/components/GrowthInsightsList";
-import type { AnalysisContent } from "@/lib/analysisReport";
-import type { GrowthInsightContent } from "@/lib/growthInsights";
+import { AccountInsightsPanel } from "@/components/AccountInsightsPanel";
+import { AccountInsightsTrigger } from "@/components/AccountInsightsTrigger";
+import { AccountInsightsList } from "@/components/AccountInsightsList";
+import type { InsightsContent } from "@/lib/accountInsights";
 
-const VALID_PRESETS: PeriodPreset[] = ["7d", "30d", "90d", "custom"];
+const INSIGHTS_WINDOW_DAYS = 90;
 
 export default async function AnalyticsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ account?: string; period?: string; from?: string; to?: string; tab?: string }>;
+  searchParams: Promise<{ account?: string; tab?: string }>;
 }) {
-  const { account: accountParam, period, from: fromParam, to: toParam, tab: tabParam } = await searchParams;
-  const preset: PeriodPreset = VALID_PRESETS.includes(period as PeriodPreset) ? (period as PeriodPreset) : "7d";
+  const { account: accountParam, tab: tabParam } = await searchParams;
   const activeTab = ANALYTICS_TABS.some((tab) => tab.value === tabParam) ? (tabParam as string) : "overview";
 
   const accounts = await prisma.instagramAccount.findMany({
@@ -51,6 +58,9 @@ export default async function AnalyticsPage({
   const selectedAccount =
     accounts.find((account) => account.id === accountParam) ?? accounts[0];
 
+  const now = new Date();
+  const windowStart = new Date(now.getTime() - INSIGHTS_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+
   const media = await prisma.instagramMedia.findMany({
     where: { accountId: selectedAccount.id },
     orderBy: { postedAt: "desc" },
@@ -66,7 +76,7 @@ export default async function AnalyticsPage({
     },
   });
 
-  const [accountSnapshots, mediaSnapshots, demographicsSnapshot] = await Promise.all([
+  const [accountSnapshots, mediaSnapshots, demographicsSnapshot, insightReports] = await Promise.all([
     prisma.instagramMetricSnapshot.findMany({
       where: { accountId: selectedAccount.id, scope: "account" },
       select: { capturedAt: true, metrics: true },
@@ -85,6 +95,11 @@ export default async function AnalyticsPage({
       where: { accountId: selectedAccount.id, scope: "demographics" },
       select: { metrics: true },
       orderBy: { capturedAt: "desc" },
+    }),
+    prisma.accountInsightReport.findMany({
+      where: { accountId: selectedAccount.id },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, trigger: true, periodFrom: true, periodTo: true, createdAt: true, content: true },
     }),
   ]);
 
@@ -114,27 +129,18 @@ export default async function AnalyticsPage({
   const ageGender = parseAgeGenderBreakdown(demographicsMetrics?.ageGender ?? []);
   const countries = parseGeographyBreakdown(demographicsMetrics?.geography ?? []);
 
-  const range = resolvePeriodRange({ preset, from: fromParam, to: toParam }, new Date());
-  const currentPoints = dailyPoints.filter((point) => {
+  const windowMedia = media.filter((item) => item.postedAt >= windowStart && item.postedAt <= now);
+  const windowDailyPoints = dailyPoints.filter((point) => {
     const date = new Date(point.date);
-    return date >= range.from && date <= range.to;
+    return date >= windowStart && date <= now;
   });
-  const previousPoints = dailyPoints.filter((point) => {
-    const date = new Date(point.date);
-    return date >= range.previousFrom && date <= range.previousTo;
-  });
-  const summary = buildPeriodSummary({ range, currentPoints, previousPoints, media, latestMetricsByMediaId });
+  const mediaEngagements = buildMediaEngagements(windowMedia, latestMetricsByMediaId);
+  const { top, bottom } = rankMedia(mediaEngagements);
+  const formatEngagements = buildMediaFormatEngagements(windowMedia, latestMetricsByMediaId);
 
-  const analysisReports = await prisma.aiAnalysisReport.findMany({
-    where: { accountId: selectedAccount.id },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, trigger: true, periodFrom: true, periodTo: true, createdAt: true, content: true },
-  });
-
-  const growthInsightReports = await prisma.growthInsightReport.findMany({
-    where: { accountId: selectedAccount.id },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, trigger: true, periodFrom: true, periodTo: true, createdAt: true, content: true },
+  const leads = await prisma.lead.findMany({
+    where: { createdAt: { gte: windowStart, lte: now } },
+    select: { destination: true },
   });
 
   return (
@@ -147,13 +153,7 @@ export default async function AnalyticsPage({
         <AccountSelector accounts={accounts} selectedAccountId={selectedAccount.id} />
       </div>
 
-      <AnalyticsTabs
-        activeTab={activeTab}
-        accountId={selectedAccount.id}
-        preset={preset}
-        from={fromParam}
-        to={toParam}
-      />
+      <AnalyticsTabs activeTab={activeTab} accountId={selectedAccount.id} />
 
       {activeTab === "overview" && (
         <>
@@ -175,54 +175,38 @@ export default async function AnalyticsPage({
         </div>
       )}
 
-      {activeTab === "summary" && (
-        <>
-          <p className="mt-8 max-w-[640px] text-[12.5px] leading-relaxed text-muted-foreground">
-            Ключевые метрики с изменением к прошлому периоду, лучшие/худшие публикации, паттерны
-            времени и аномалии — данные для AI-разбора.
-          </p>
-          <div className="mt-3">
-            <PeriodSelector accountId={selectedAccount.id} preset={preset} from={fromParam} to={toParam} />
-          </div>
-          <div className="mt-4">
-            <SummaryPanel summary={summary} />
-          </div>
-        </>
-      )}
-
       {activeTab === "ai" && (
         <>
-          <h2 className="mt-8 text-[13.5px] font-semibold text-foreground">AI-разбор</h2>
-          <p className="mt-1 max-w-[640px] text-[12.5px] leading-relaxed text-muted-foreground">
-            Claude разбирает сводку выше и даёт наблюдения и рекомендации, опираясь только на
-            собранные данные. Еженедельный дайджест формируется автоматически.
+          <p className="mt-8 max-w-[640px] text-[12.5px] leading-relaxed text-muted-foreground">
+            Метрики, публикации, паттерны и аномалии считаются автоматически за фиксированное
+            90-дневное окно. Claude разбирает эти данные целиком — общая картина, наблюдения,
+            пробелы, направление развития и приоритизированные рекомендации — и делает это
+            заново по кнопке или раз в неделю.
           </p>
-          <div className="mt-3">
-            <AnalysisTrigger accountId={selectedAccount.id} preset={preset} from={fromParam} to={toParam} />
-          </div>
-          <div className="mt-4 max-w-[1020px]">
-            <AnalysisReportsList
-              reports={analysisReports.map((report) => ({
-                ...report,
-                content: report.content as unknown as AnalysisContent,
-              }))}
+
+          <h2 className="mt-6 text-[13.5px] font-semibold text-foreground">Данные за 90 дней</h2>
+          <div className="mt-3 max-w-[1020px]">
+            <AccountInsightsPanel
+              metricTrends={buildMetricTrends(windowDailyPoints)}
+              topMedia={top}
+              bottomMedia={bottom}
+              weekdayPattern={buildWeekdayPattern(mediaEngagements)}
+              timeOfDayPattern={buildTimeOfDayPattern(mediaEngagements)}
+              anomalies={detectAnomalies(windowDailyPoints)}
+              formatBreakdown={buildFormatBreakdown(formatEngagements)}
+              demandSignal={buildDemandSignal(leads)}
             />
           </div>
 
-          <h2 className="mt-9 text-[13.5px] font-semibold text-foreground">Узкие места и направление роста</h2>
-          <p className="mt-1 max-w-[640px] text-[12.5px] leading-relaxed text-muted-foreground">
-            Независимый стратегический разбор на фиксированном 90-дневном окне: вовлечённость по
-            форматам, тренд охвата и (когда появятся) разрыв между спросом из заявок и контентом.
-            Ежемесячный дайджест формируется автоматически.
-          </p>
+          <h2 className="mt-9 text-[13.5px] font-semibold text-foreground">AI-разбор</h2>
           <div className="mt-3">
-            <GrowthInsightTrigger accountId={selectedAccount.id} />
+            <AccountInsightsTrigger accountId={selectedAccount.id} />
           </div>
           <div className="mt-4 max-w-[1020px]">
-            <GrowthInsightsList
-              reports={growthInsightReports.map((report) => ({
+            <AccountInsightsList
+              reports={insightReports.map((report) => ({
                 ...report,
-                content: report.content as unknown as GrowthInsightContent,
+                content: report.content as unknown as InsightsContent,
               }))}
             />
           </div>

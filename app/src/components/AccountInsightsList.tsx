@@ -1,24 +1,24 @@
-import type { AnalysisContent } from "@/lib/analysisReport";
+import type { InsightsContent } from "@/lib/accountInsights";
 
-export interface AnalysisReportItem {
+export interface AccountInsightReportItem {
   id: string;
   trigger: string;
   periodFrom: Date;
   periodTo: Date;
   createdAt: Date;
-  content: AnalysisContent;
+  content: InsightsContent;
 }
 
 const TRIGGER_LABELS: Record<string, string> = {
   manual: "по запросу",
-  weekly: "еженедельный дайджест",
+  digest: "еженедельный дайджест",
 };
 
 function formatDate(date: Date): string {
   return date.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", timeZone: "UTC" });
 }
 
-export function AnalysisReportsList({ reports }: { reports: AnalysisReportItem[] }) {
+export function AccountInsightsList({ reports }: { reports: AccountInsightReportItem[] }) {
   if (reports.length === 0) {
     return (
       <div className="rounded-[14px] border border-dashed border-border bg-card p-6 text-sm text-subtle">
@@ -39,7 +39,9 @@ export function AnalysisReportsList({ reports }: { reports: AnalysisReportItem[]
           </span>
           <span className="text-[11.5px] text-subtle">{formatDate(latest.createdAt)}</span>
         </div>
+
         <p className="mt-2 text-[14px] leading-relaxed text-foreground">{latest.content.summary}</p>
+
         {latest.content.observations.length > 0 && (
           <>
             <h4 className="mt-4 text-[12px] font-semibold uppercase tracking-wide text-subtle">Наблюдения</h4>
@@ -50,14 +52,29 @@ export function AnalysisReportsList({ reports }: { reports: AnalysisReportItem[]
             </ul>
           </>
         )}
-        {latest.content.recommendations.length > 0 && (
+
+        {latest.content.gaps.length > 0 && (
           <>
-            <h4 className="mt-4 text-[12px] font-semibold uppercase tracking-wide text-subtle">Рекомендации</h4>
+            <h4 className="mt-4 text-[12px] font-semibold uppercase tracking-wide text-subtle">Пробелы</h4>
             <ul className="mt-1.5 list-disc space-y-1 pl-5 text-[13px] text-muted-foreground">
-              {latest.content.recommendations.map((item, index) => (
+              {latest.content.gaps.map((item, index) => (
                 <li key={index}>{item}</li>
               ))}
             </ul>
+          </>
+        )}
+
+        <h4 className="mt-4 text-[12px] font-semibold uppercase tracking-wide text-subtle">Направление</h4>
+        <p className="mt-1.5 text-[14px] leading-relaxed text-foreground">{latest.content.direction}</p>
+
+        {latest.content.recommendations.length > 0 && (
+          <>
+            <h4 className="mt-4 text-[12px] font-semibold uppercase tracking-wide text-subtle">Рекомендации</h4>
+            <ol className="mt-1.5 list-decimal space-y-1 pl-5 text-[13px] text-muted-foreground">
+              {latest.content.recommendations.map((item, index) => (
+                <li key={index}>{item}</li>
+              ))}
+            </ol>
           </>
         )}
       </div>

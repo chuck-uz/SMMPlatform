@@ -1,72 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-  resolvePeriodRange,
-  buildMetricDeltas,
   buildMediaEngagements,
   rankMedia,
   buildWeekdayPattern,
   buildTimeOfDayPattern,
   detectAnomalies,
-  buildPeriodSummary,
 } from "./analyticsSummary";
-
-describe("resolvePeriodRange", () => {
-  it("resolves a preset to [now - N days, now] and an equal-length previous period", () => {
-    const now = new Date("2026-07-14T00:00:00Z");
-    const range = resolvePeriodRange({ preset: "7d" }, now);
-
-    expect(range.to).toEqual(now);
-    expect(range.from).toEqual(new Date("2026-07-07T00:00:00Z"));
-    expect(range.previousTo).toEqual(range.from);
-    expect(range.previousFrom).toEqual(new Date("2026-06-30T00:00:00Z"));
-  });
-
-  it("resolves a custom range from explicit dates", () => {
-    const now = new Date("2026-07-14T00:00:00Z");
-    const range = resolvePeriodRange({ preset: "custom", from: "2026-07-01", to: "2026-07-10" }, now);
-
-    expect(range.from).toEqual(new Date("2026-07-01"));
-    expect(range.to).toEqual(new Date("2026-07-10"));
-    expect(range.previousTo).toEqual(new Date("2026-07-01"));
-  });
-
-  it("falls back to the 7d preset if custom is selected without dates", () => {
-    const now = new Date("2026-07-14T00:00:00Z");
-    const range = resolvePeriodRange({ preset: "custom" }, now);
-
-    expect(range.from).toEqual(new Date("2026-07-07T00:00:00Z"));
-  });
-});
-
-describe("buildMetricDeltas", () => {
-  it("sums flow metrics across the period and computes % change", () => {
-    const current = [{ metrics: { reach: 100 } }, { metrics: { reach: 150 } }];
-    const previous = [{ metrics: { reach: 100 } }, { metrics: { reach: 100 } }];
-
-    const deltas = buildMetricDeltas(current, previous);
-    const reach = deltas.find((d) => d.key === "reach");
-
-    expect(reach).toEqual({ key: "reach", label: "Охват", current: 250, previous: 200, changePercent: 25 });
-  });
-
-  it("uses the last value (not sum) for the stock metric followerCount", () => {
-    const current = [{ metrics: { followerCount: 200 } }, { metrics: { followerCount: 220 } }];
-    const previous = [{ metrics: { followerCount: 180 } }, { metrics: { followerCount: 200 } }];
-
-    const deltas = buildMetricDeltas(current, previous);
-    const followers = deltas.find((d) => d.key === "followerCount");
-
-    expect(followers).toEqual({ key: "followerCount", label: "Подписчики", current: 220, previous: 200, changePercent: 10 });
-  });
-
-  it("returns null changePercent when the previous value is 0", () => {
-    const current = [{ metrics: { website_clicks: 5 } }];
-    const previous = [{ metrics: { website_clicks: 0 } }];
-
-    const deltas = buildMetricDeltas(current, previous);
-    expect(deltas.find((d) => d.key === "website_clicks")?.changePercent).toBeNull();
-  });
-});
 
 describe("buildMediaEngagements", () => {
   it("keeps only FEED and REELS, attaching total_interactions from the latest snapshot", () => {
@@ -174,35 +113,5 @@ describe("detectAnomalies", () => {
     ];
 
     expect(detectAnomalies(dailyPoints, ["reach"])).toEqual([]);
-  });
-});
-
-describe("buildPeriodSummary", () => {
-  it("filters media to the period range before ranking and building time patterns", () => {
-    const range = {
-      from: new Date("2026-07-01T00:00:00Z"),
-      to: new Date("2026-07-10T00:00:00Z"),
-      previousFrom: new Date("2026-06-21T00:00:00Z"),
-      previousTo: new Date("2026-07-01T00:00:00Z"),
-    };
-    const media = [
-      { id: "in-range", caption: null, mediaProductType: "FEED", postedAt: new Date("2026-07-05") },
-      { id: "out-of-range", caption: null, mediaProductType: "FEED", postedAt: new Date("2026-06-15") },
-    ];
-    const latestMetricsByMediaId = new Map([
-      ["in-range", { total_interactions: 50 }],
-      ["out-of-range", { total_interactions: 999 }],
-    ]);
-
-    const summary = buildPeriodSummary({
-      range,
-      currentPoints: [{ date: "2026-07-05", metrics: { reach: 100 } }],
-      previousPoints: [{ metrics: { reach: 80 } }],
-      media,
-      latestMetricsByMediaId,
-    });
-
-    expect(summary.topMedia.map((m) => m.id)).toEqual(["in-range"]);
-    expect(summary.range).toBe(range);
   });
 });

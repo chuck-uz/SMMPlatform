@@ -1,84 +1,11 @@
 import { ACCOUNT_METRIC_LABELS } from "./analyticsDashboard";
 
-export type PeriodPreset = "7d" | "30d" | "90d" | "custom";
-
-const PRESET_DAYS: Record<"7d" | "30d" | "90d", number> = { "7d": 7, "30d": 30, "90d": 90 };
-
-export interface PeriodRange {
-  from: Date;
-  to: Date;
-  previousFrom: Date;
-  previousTo: Date;
-}
-
-export function resolvePeriodRange(
-  params: { preset: PeriodPreset; from?: string; to?: string },
-  now: Date,
-): PeriodRange {
-  let from: Date;
-  let to: Date;
-
-  if (params.preset === "custom" && params.from && params.to) {
-    from = new Date(params.from);
-    to = new Date(params.to);
-  } else {
-    const days = PRESET_DAYS[params.preset as "7d" | "30d" | "90d"] ?? PRESET_DAYS["7d"];
-    to = now;
-    from = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-  }
-
-  const durationMs = Math.max(0, to.getTime() - from.getTime());
-  const previousTo = new Date(from.getTime());
-  const previousFrom = new Date(from.getTime() - durationMs);
-
-  return { from, to, previousFrom, previousTo };
-}
-
-const FLOW_METRIC_KEYS = ["reach", "profile_views", "accounts_engaged", "total_interactions", "website_clicks"] as const;
-const STOCK_METRIC_KEYS = ["followerCount"] as const;
-
-export interface MetricDelta {
-  key: string;
-  label: string;
-  current: number;
-  previous: number;
-  changePercent: number | null;
-}
+export const FLOW_METRIC_KEYS = ["reach", "profile_views", "accounts_engaged", "total_interactions", "website_clicks"] as const;
+export const STOCK_METRIC_KEYS = ["followerCount"] as const;
 
 function average(values: number[]): number {
   if (values.length === 0) return 0;
   return values.reduce((a, b) => a + b, 0) / values.length;
-}
-
-function sumMetric(points: Array<{ metrics: Record<string, unknown> }>, key: string): number {
-  return points.reduce((total, p) => total + (typeof p.metrics[key] === "number" ? (p.metrics[key] as number) : 0), 0);
-}
-
-function lastMetric(points: Array<{ metrics: Record<string, unknown> }>, key: string): number {
-  const value = points[points.length - 1]?.metrics[key];
-  return typeof value === "number" ? value : 0;
-}
-
-function changePercent(current: number, previous: number): number | null {
-  if (previous === 0) return null;
-  return ((current - previous) / previous) * 100;
-}
-
-export function buildMetricDeltas(
-  currentPoints: Array<{ metrics: Record<string, unknown> }>,
-  previousPoints: Array<{ metrics: Record<string, unknown> }>,
-): MetricDelta[] {
-  const stock = STOCK_METRIC_KEYS.map((key) => {
-    const current = lastMetric(currentPoints, key);
-    const previous = lastMetric(previousPoints, key);
-    return { key, label: ACCOUNT_METRIC_LABELS[key], current, previous, changePercent: changePercent(current, previous) };
-  });
-  const flow = FLOW_METRIC_KEYS.map((key) => {
-    const current = sumMetric(currentPoints, key);
-    const previous = sumMetric(previousPoints, key);
-    return { key, label: ACCOUNT_METRIC_LABELS[key], current, previous, changePercent: changePercent(current, previous) };
-  });
-  return [...stock, ...flow];
 }
 
 export interface MediaEngagement {
@@ -200,38 +127,4 @@ export function detectAnomalies(
     }
   }
   return anomalies;
-}
-
-export interface PeriodSummary {
-  range: PeriodRange;
-  metricDeltas: MetricDelta[];
-  topMedia: MediaEngagement[];
-  bottomMedia: MediaEngagement[];
-  weekdayPattern: TimePatternBucket[];
-  timeOfDayPattern: TimePatternBucket[];
-  anomalies: Anomaly[];
-}
-
-export function buildPeriodSummary(params: {
-  range: PeriodRange;
-  currentPoints: Array<{ date: string; metrics: Record<string, unknown> }>;
-  previousPoints: Array<{ metrics: Record<string, unknown> }>;
-  media: Array<{ id: string; caption: string | null; mediaProductType: string | null; postedAt: Date }>;
-  latestMetricsByMediaId: Map<string, Record<string, unknown>>;
-}): PeriodSummary {
-  const mediaInRange = params.media.filter(
-    (item) => item.postedAt >= params.range.from && item.postedAt <= params.range.to,
-  );
-  const engagements = buildMediaEngagements(mediaInRange, params.latestMetricsByMediaId);
-  const { top, bottom } = rankMedia(engagements);
-
-  return {
-    range: params.range,
-    metricDeltas: buildMetricDeltas(params.currentPoints, params.previousPoints),
-    topMedia: top,
-    bottomMedia: bottom,
-    weekdayPattern: buildWeekdayPattern(engagements),
-    timeOfDayPattern: buildTimeOfDayPattern(engagements),
-    anomalies: detectAnomalies(params.currentPoints),
-  };
 }

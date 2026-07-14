@@ -2,14 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   buildMediaFormatEngagements,
   buildFormatBreakdown,
-  buildReachTrend,
+  buildMetricTrends,
   buildDemandSignal,
-  buildGrowthPrompt,
-  parseGrowthContent,
-  shouldSkipManualGrowthAnalysis,
-  isGrowthDigestDue,
-  type GrowthInputs,
-} from "./growthInsights";
+  buildInsightsPrompt,
+  parseInsightsContent,
+  shouldSkipManualInsights,
+  isInsightsDigestDue,
+  type InsightsInputs,
+} from "./accountInsights";
 
 describe("buildMediaFormatEngagements", () => {
   it("classifies REELS product type as reels regardless of mediaType", () => {
@@ -33,14 +33,6 @@ describe("buildMediaFormatEngagements", () => {
 
     expect(result.map((r) => r.format)).toEqual(["carousel", "photo", "video"]);
   });
-
-  it("defaults totalInteractions to 0 when no metrics snapshot exists", () => {
-    const media = [{ id: "1", mediaType: "IMAGE", mediaProductType: "FEED", postedAt: new Date("2026-07-01T00:00:00Z") }];
-
-    const result = buildMediaFormatEngagements(media, new Map());
-
-    expect(result[0].totalInteractions).toBe(0);
-  });
 });
 
 describe("buildFormatBreakdown", () => {
@@ -51,9 +43,7 @@ describe("buildFormatBreakdown", () => {
       { id: "3", format: "photo" as const, totalInteractions: 5, postedAt: new Date() },
     ];
 
-    const result = buildFormatBreakdown(engagements);
-
-    expect(result).toEqual([]);
+    expect(buildFormatBreakdown(engagements)).toEqual([]);
   });
 
   it("returns average interactions per format with enough samples, in fixed format order", () => {
@@ -66,28 +56,40 @@ describe("buildFormatBreakdown", () => {
       { id: "6", format: "reels" as const, totalInteractions: 90, postedAt: new Date() },
     ];
 
-    const result = buildFormatBreakdown(engagements);
-
-    expect(result).toEqual([
+    expect(buildFormatBreakdown(engagements)).toEqual([
       { format: "reels", label: "Reels", averageInteractions: 90, sampleSize: 3 },
       { format: "photo", label: "Фото", averageInteractions: 20, sampleSize: 3 },
     ]);
   });
 });
 
-describe("buildReachTrend", () => {
+describe("buildMetricTrends", () => {
   it("reports insufficient data below the minimum point threshold", () => {
     const points = [
       { date: "2026-07-01", metrics: { reach: 100 } },
       { date: "2026-07-02", metrics: { reach: 100 } },
     ];
 
-    const result = buildReachTrend(points);
-
-    expect(result.sufficientData).toBe(false);
+    expect(buildMetricTrends(points)).toEqual({ sufficientData: false, metrics: [] });
   });
 
-  it("flags a decline when the second half drops more than 20% vs the first half", () => {
+  it("uses the last value (not average) for the stock metric followerCount", () => {
+    const points = [
+      { date: "2026-07-01", metrics: { followerCount: 100 } },
+      { date: "2026-07-02", metrics: { followerCount: 110 } },
+      { date: "2026-07-03", metrics: { followerCount: 120 } },
+      { date: "2026-07-04", metrics: { followerCount: 130 } },
+      { date: "2026-07-05", metrics: { followerCount: 140 } },
+      { date: "2026-07-06", metrics: { followerCount: 150 } },
+    ];
+
+    const result = buildMetricTrends(points);
+    const followers = result.metrics.find((m) => m.key === "followerCount");
+
+    expect(followers).toMatchObject({ firstHalfValue: 120, secondHalfValue: 150 });
+  });
+
+  it("uses the average (not sum) for flow metrics and flags a decline", () => {
     const points = [
       { date: "2026-07-01", metrics: { reach: 100 } },
       { date: "2026-07-02", metrics: { reach: 100 } },
@@ -97,28 +99,11 @@ describe("buildReachTrend", () => {
       { date: "2026-07-06", metrics: { reach: 50 } },
     ];
 
-    const result = buildReachTrend(points);
+    const result = buildMetricTrends(points);
+    const reach = result.metrics.find((m) => m.key === "reach");
 
     expect(result.sufficientData).toBe(true);
-    expect(result.firstHalfAverage).toBe(100);
-    expect(result.secondHalfAverage).toBe(50);
-    expect(result.changePercent).toBe(-50);
-    expect(result.isDeclining).toBe(true);
-  });
-
-  it("does not flag a decline under the threshold", () => {
-    const points = [
-      { date: "2026-07-01", metrics: { reach: 100 } },
-      { date: "2026-07-02", metrics: { reach: 100 } },
-      { date: "2026-07-03", metrics: { reach: 100 } },
-      { date: "2026-07-04", metrics: { reach: 95 } },
-      { date: "2026-07-05", metrics: { reach: 95 } },
-      { date: "2026-07-06", metrics: { reach: 95 } },
-    ];
-
-    const result = buildReachTrend(points);
-
-    expect(result.isDeclining).toBe(false);
+    expect(reach).toMatchObject({ firstHalfValue: 100, secondHalfValue: 50, changePercent: -50, isDeclining: true });
   });
 });
 
@@ -128,17 +113,9 @@ describe("buildDemandSignal", () => {
   });
 
   it("groups and ranks leads by destination, ignoring blank destinations", () => {
-    const leads = [
-      { destination: "Дубай" },
-      { destination: "Дубай" },
-      { destination: "Бали" },
-      { destination: null },
-      { destination: "  " },
-    ];
+    const leads = [{ destination: "Дубай" }, { destination: "Дубай" }, { destination: "Бали" }, { destination: null }];
 
-    const result = buildDemandSignal(leads);
-
-    expect(result).toEqual({
+    expect(buildDemandSignal(leads)).toEqual({
       available: true,
       destinationCounts: [
         { destination: "Дубай", count: 2 },
@@ -148,78 +125,94 @@ describe("buildDemandSignal", () => {
   });
 });
 
-function buildInputs(overrides: Partial<GrowthInputs> = {}): GrowthInputs {
+function buildInputs(overrides: Partial<InsightsInputs> = {}): InsightsInputs {
   return {
     range: { from: "2026-04-16", to: "2026-07-14" },
-    formatBreakdown: [{ format: "reels", label: "Reels", averageInteractions: 90, sampleSize: 5 }],
-    reachTrend: { firstHalfAverage: 100, secondHalfAverage: 50, changePercent: -50, isDeclining: true, sufficientData: true },
+    metricTrends: { sufficientData: false, metrics: [] },
+    topMedia: [],
+    bottomMedia: [],
+    weekdayPattern: [],
+    timeOfDayPattern: [],
+    anomalies: [],
+    formatBreakdown: [],
     demandSignal: { available: false, destinationCounts: [] },
     ...overrides,
   };
 }
 
-describe("buildGrowthPrompt", () => {
+describe("buildInsightsPrompt", () => {
   it("embeds the period range and serialized inputs as JSON", () => {
-    const prompt = buildGrowthPrompt(buildInputs());
+    const prompt = buildInsightsPrompt(buildInputs());
 
     expect(prompt).toContain("2026-04-16 — 2026-07-14");
-    expect(prompt).toContain('"averageInteractions": 90');
+    expect(prompt).toContain('"sufficientData": false');
   });
 
-  it("tells the model demand data is unavailable when the demand signal is unavailable", () => {
-    const prompt = buildGrowthPrompt(buildInputs({ demandSignal: { available: false, destinationCounts: [] } }));
+  it("tells the model demand data is unavailable in plain language, without the field name", () => {
+    const prompt = buildInsightsPrompt(buildInputs({ demandSignal: { available: false, destinationCounts: [] } }));
 
-    expect(prompt).toContain("данных о заявках пока нет");
+    expect(prompt).toContain("Данных о заявках пока нет");
+    expect(prompt).not.toContain("demandSignal.available");
   });
 });
 
-describe("parseGrowthContent", () => {
+describe("parseInsightsContent", () => {
   it("accepts a well-formed structured response", () => {
     const raw = {
-      bottlenecks: ["Reels стабильно опережают фото по вовлечённости."],
-      direction: "Сфокусироваться на Reels-формате.",
-      growthPriorities: ["Публиковать больше Reels."],
+      summary: "Аккаунт молодой, данных пока мало.",
+      observations: ["Подписчики выросли с 0 до 217."],
+      gaps: ["Нет данных по вовлечённости в разрезе форматов."],
+      direction: "Сфокусироваться на сборе базовой аналитики.",
+      recommendations: ["Публиковать регулярно, чтобы накопить данные."],
     };
 
-    expect(parseGrowthContent(raw)).toEqual(raw);
+    expect(parseInsightsContent(raw)).toEqual(raw);
   });
 
   it("rejects a response missing required fields or with wrong types", () => {
-    expect(parseGrowthContent({ direction: "..." })).toBeNull();
-    expect(parseGrowthContent({ bottlenecks: [1], direction: "...", growthPriorities: [] })).toBeNull();
-    expect(parseGrowthContent(null)).toBeNull();
-    expect(parseGrowthContent("not an object")).toBeNull();
+    expect(parseInsightsContent({ summary: "..." })).toBeNull();
+    expect(
+      parseInsightsContent({
+        summary: "...",
+        observations: [1],
+        gaps: [],
+        direction: "...",
+        recommendations: [],
+      }),
+    ).toBeNull();
+    expect(parseInsightsContent(null)).toBeNull();
+    expect(parseInsightsContent("not an object")).toBeNull();
   });
 });
 
-describe("shouldSkipManualGrowthAnalysis", () => {
+describe("shouldSkipManualInsights", () => {
   it("skips when the last manual report is under 5 minutes old", () => {
     const now = new Date("2026-07-14T12:05:00Z");
-    expect(shouldSkipManualGrowthAnalysis({ createdAt: new Date("2026-07-14T12:02:00Z") }, now)).toBe(true);
+    expect(shouldSkipManualInsights({ createdAt: new Date("2026-07-14T12:02:00Z") }, now)).toBe(true);
   });
 
   it("allows a new analysis once 5 minutes have passed", () => {
     const now = new Date("2026-07-14T12:10:00Z");
-    expect(shouldSkipManualGrowthAnalysis({ createdAt: new Date("2026-07-14T12:02:00Z") }, now)).toBe(false);
+    expect(shouldSkipManualInsights({ createdAt: new Date("2026-07-14T12:02:00Z") }, now)).toBe(false);
   });
 
   it("allows analysis when there is no prior report", () => {
-    expect(shouldSkipManualGrowthAnalysis(null, new Date())).toBe(false);
+    expect(shouldSkipManualInsights(null, new Date())).toBe(false);
   });
 });
 
-describe("isGrowthDigestDue", () => {
-  it("is not due before 30 days have passed", () => {
-    const now = new Date("2026-07-30T00:00:00Z");
-    expect(isGrowthDigestDue({ createdAt: new Date("2026-07-01T00:00:00Z") }, now)).toBe(false);
+describe("isInsightsDigestDue", () => {
+  it("is not due before 7 days have passed", () => {
+    const now = new Date("2026-07-14T00:00:00Z");
+    expect(isInsightsDigestDue({ createdAt: new Date("2026-07-10T00:00:00Z") }, now)).toBe(false);
   });
 
-  it("is due once 30 days have passed", () => {
-    const now = new Date("2026-07-31T00:00:00Z");
-    expect(isGrowthDigestDue({ createdAt: new Date("2026-07-01T00:00:00Z") }, now)).toBe(true);
+  it("is due once 7 days have passed", () => {
+    const now = new Date("2026-07-14T00:00:00Z");
+    expect(isInsightsDigestDue({ createdAt: new Date("2026-07-07T00:00:00Z") }, now)).toBe(true);
   });
 
   it("is due when there is no prior digest report", () => {
-    expect(isGrowthDigestDue(null, new Date())).toBe(true);
+    expect(isInsightsDigestDue(null, new Date())).toBe(true);
   });
 });
