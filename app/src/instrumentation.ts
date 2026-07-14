@@ -52,10 +52,7 @@ export async function register() {
     for (const account of accounts) {
       try {
         const accessToken = decrypt(account.accessToken, encryptionKey);
-        const rawMedia = await instagramContentClient.listMedia({
-          accessToken,
-          instagramUserId: account.instagramUserId,
-        });
+        const rawMedia = await instagramContentClient.listMedia({ accessToken });
 
         for (const raw of rawMedia) {
           const media = normalizeMedia(raw, account.id);
@@ -118,10 +115,7 @@ export async function register() {
       try {
         const accessToken = decrypt(account.accessToken, encryptionKey);
 
-        const accountInsights = await instagramContentClient.getAccountInsights({
-          accessToken,
-          instagramUserId: account.instagramUserId,
-        });
+        const accountInsights = await instagramContentClient.getAccountInsights({ accessToken });
         await prisma.instagramMetricSnapshot.create({
           data: buildMetricSnapshot({
             metrics: flattenInsights(accountInsights),
