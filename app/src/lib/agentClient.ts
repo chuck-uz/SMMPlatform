@@ -2,6 +2,7 @@ import { parseAgentReplyContent, type AgentReplyContent } from "./leadFields";
 
 const MESSAGES_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
+const MAX_TOKENS = 4096;
 
 const REPLY_OUTPUT_SCHEMA = {
   type: "object",
@@ -41,7 +42,7 @@ export async function respondAndExtractLead(
     },
     body: JSON.stringify({
       model,
-      max_tokens: 2048,
+      max_tokens: MAX_TOKENS,
       system: systemPrompt,
       messages,
       output_config: { format: { type: "json_schema", schema: REPLY_OUTPUT_SCHEMA } },
@@ -56,9 +57,19 @@ export async function respondAndExtractLead(
   }
 
   const data = await response.json();
-  if (data.stop_reason !== "end_turn") {
-    console.log(`[agentClient] non-standard stop_reason: ${data.stop_reason}, model: ${model}`);
+  const outputTokens = data.usage?.output_tokens;
+  console.log(
+    `[agentClient] stop_reason=${data.stop_reason}, output_tokens=${outputTokens}, max_tokens=${MAX_TOKENS}, model=${model}`,
+  );
+
+  // The JSON-schema-constrained decoder can force-close a truncated response into
+  // syntactically valid but garbled JSON once the token budget runs out, while still
+  // reporting stop_reason "end_turn" — so budget exhaustion must be detected via
+  // output_tokens, not stop_reason alone.
+  if (typeof outputTokens === "number" && outputTokens >= MAX_TOKENS - 16) {
+    throw new Error("Claude ответ обрезан по лимиту токенов — повторите запрос");
   }
+
   const textBlock = (data.content as Array<{ type: string; text?: string }> | undefined)?.find(
     (block) => block.type === "text",
   );
