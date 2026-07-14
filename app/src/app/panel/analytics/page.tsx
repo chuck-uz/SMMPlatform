@@ -8,6 +8,7 @@ import {
 } from "@/lib/analyticsDashboard";
 import { resolvePeriodRange, buildPeriodSummary, type PeriodPreset } from "@/lib/analyticsSummary";
 import { AccountSelector } from "@/components/AccountSelector";
+import { ANALYTICS_TABS, AnalyticsTabs } from "@/components/AnalyticsTabs";
 import { AnalyticsCharts } from "@/components/AnalyticsCharts";
 import { MediaTable } from "@/components/MediaTable";
 import { DemographicsBlock } from "@/components/DemographicsBlock";
@@ -25,10 +26,11 @@ const VALID_PRESETS: PeriodPreset[] = ["7d", "30d", "90d", "custom"];
 export default async function AnalyticsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ account?: string; period?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ account?: string; period?: string; from?: string; to?: string; tab?: string }>;
 }) {
-  const { account: accountParam, period, from: fromParam, to: toParam } = await searchParams;
+  const { account: accountParam, period, from: fromParam, to: toParam, tab: tabParam } = await searchParams;
   const preset: PeriodPreset = VALID_PRESETS.includes(period as PeriodPreset) ? (period as PeriodPreset) : "7d";
+  const activeTab = ANALYTICS_TABS.some((tab) => tab.value === tabParam) ? (tabParam as string) : "overview";
 
   const accounts = await prisma.instagramAccount.findMany({
     orderBy: { createdAt: "asc" },
@@ -145,67 +147,87 @@ export default async function AnalyticsPage({
         <AccountSelector accounts={accounts} selectedAccountId={selectedAccount.id} />
       </div>
 
-      <h2 className="mt-8 text-[13.5px] font-semibold text-foreground">Динамика</h2>
-      <div className="mt-3 max-w-[1020px]">
-        <AnalyticsCharts charts={charts} />
-      </div>
+      <AnalyticsTabs
+        activeTab={activeTab}
+        accountId={selectedAccount.id}
+        preset={preset}
+        from={fromParam}
+        to={toParam}
+      />
 
-      <h2 className="mt-9 text-[13.5px] font-semibold text-foreground">Публикации</h2>
-      <div className="mt-3 max-w-[1020px]">
-        <MediaTable rows={mediaRows} />
-      </div>
+      {activeTab === "overview" && (
+        <>
+          <h2 className="mt-8 text-[13.5px] font-semibold text-foreground">Динамика</h2>
+          <div className="mt-3 max-w-[1020px]">
+            <AnalyticsCharts charts={charts} />
+          </div>
 
-      <h2 className="mt-9 text-[13.5px] font-semibold text-foreground">Демография аудитории</h2>
-      <div className="mt-3 max-w-[1020px]">
-        <DemographicsBlock followerCount={followerCount} ageGender={ageGender} countries={countries} />
-      </div>
+          <h2 className="mt-9 text-[13.5px] font-semibold text-foreground">Демография аудитории</h2>
+          <div className="mt-3 max-w-[1020px]">
+            <DemographicsBlock followerCount={followerCount} ageGender={ageGender} countries={countries} />
+          </div>
+        </>
+      )}
 
-      <h2 className="mt-9 text-[13.5px] font-semibold text-foreground">Сводка за период</h2>
-      <p className="mt-1 max-w-[640px] text-[12.5px] leading-relaxed text-muted-foreground">
-        Ключевые метрики с изменением к прошлому периоду, лучшие/худшие публикации, паттерны
-        времени и аномалии — данные для будущего AI-разбора (AN4).
-      </p>
-      <div className="mt-3">
-        <PeriodSelector accountId={selectedAccount.id} preset={preset} from={fromParam} to={toParam} />
-      </div>
-      <div className="mt-4">
-        <SummaryPanel summary={summary} />
-      </div>
+      {activeTab === "posts" && (
+        <div className="mt-8 max-w-[1020px]">
+          <MediaTable rows={mediaRows} />
+        </div>
+      )}
 
-      <h2 className="mt-9 text-[13.5px] font-semibold text-foreground">AI-разбор</h2>
-      <p className="mt-1 max-w-[640px] text-[12.5px] leading-relaxed text-muted-foreground">
-        Claude разбирает сводку выше и даёт наблюдения и рекомендации, опираясь только на
-        собранные данные. Еженедельный дайджест формируется автоматически.
-      </p>
-      <div className="mt-3">
-        <AnalysisTrigger accountId={selectedAccount.id} preset={preset} from={fromParam} to={toParam} />
-      </div>
-      <div className="mt-4 max-w-[1020px]">
-        <AnalysisReportsList
-          reports={analysisReports.map((report) => ({
-            ...report,
-            content: report.content as unknown as AnalysisContent,
-          }))}
-        />
-      </div>
+      {activeTab === "summary" && (
+        <>
+          <p className="mt-8 max-w-[640px] text-[12.5px] leading-relaxed text-muted-foreground">
+            Ключевые метрики с изменением к прошлому периоду, лучшие/худшие публикации, паттерны
+            времени и аномалии — данные для AI-разбора (AN4).
+          </p>
+          <div className="mt-3">
+            <PeriodSelector accountId={selectedAccount.id} preset={preset} from={fromParam} to={toParam} />
+          </div>
+          <div className="mt-4">
+            <SummaryPanel summary={summary} />
+          </div>
+        </>
+      )}
 
-      <h2 className="mt-9 text-[13.5px] font-semibold text-foreground">Узкие места и направление роста</h2>
-      <p className="mt-1 max-w-[640px] text-[12.5px] leading-relaxed text-muted-foreground">
-        Независимый стратегический разбор на фиксированном 90-дневном окне: вовлечённость по
-        форматам, тренд охвата и (когда появятся) разрыв между спросом из заявок и контентом.
-        Ежемесячный дайджест формируется автоматически.
-      </p>
-      <div className="mt-3">
-        <GrowthInsightTrigger accountId={selectedAccount.id} />
-      </div>
-      <div className="mt-4 max-w-[1020px]">
-        <GrowthInsightsList
-          reports={growthInsightReports.map((report) => ({
-            ...report,
-            content: report.content as unknown as GrowthInsightContent,
-          }))}
-        />
-      </div>
+      {activeTab === "ai" && (
+        <>
+          <h2 className="mt-8 text-[13.5px] font-semibold text-foreground">AI-разбор</h2>
+          <p className="mt-1 max-w-[640px] text-[12.5px] leading-relaxed text-muted-foreground">
+            Claude разбирает сводку выше и даёт наблюдения и рекомендации, опираясь только на
+            собранные данные. Еженедельный дайджест формируется автоматически.
+          </p>
+          <div className="mt-3">
+            <AnalysisTrigger accountId={selectedAccount.id} preset={preset} from={fromParam} to={toParam} />
+          </div>
+          <div className="mt-4 max-w-[1020px]">
+            <AnalysisReportsList
+              reports={analysisReports.map((report) => ({
+                ...report,
+                content: report.content as unknown as AnalysisContent,
+              }))}
+            />
+          </div>
+
+          <h2 className="mt-9 text-[13.5px] font-semibold text-foreground">Узкие места и направление роста</h2>
+          <p className="mt-1 max-w-[640px] text-[12.5px] leading-relaxed text-muted-foreground">
+            Независимый стратегический разбор на фиксированном 90-дневном окне: вовлечённость по
+            форматам, тренд охвата и (когда появятся) разрыв между спросом из заявок и контентом.
+            Ежемесячный дайджест формируется автоматически.
+          </p>
+          <div className="mt-3">
+            <GrowthInsightTrigger accountId={selectedAccount.id} />
+          </div>
+          <div className="mt-4 max-w-[1020px]">
+            <GrowthInsightsList
+              reports={growthInsightReports.map((report) => ({
+                ...report,
+                content: report.content as unknown as GrowthInsightContent,
+              }))}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }
