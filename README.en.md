@@ -22,6 +22,7 @@ Two core points: **(1)** consultation and lead capture, **(2)** promotion and ac
 - **AI analysis of the summary** — Claude (Sonnet) breaks down the summary on demand or automatically once a week: summary → observations → recommendations, grounded only in the data actually collected, with no fabricated numbers.
 - **AI agent core** — an admin sets the agent's tone/rules, a knowledge base of tours, and reference example dialogues; a sandbox lets you test replies (Claude Haiku) and rate them 👍/👎 before they reach real channels.
 - **In-dialogue lead capture** — as the conversation unfolds, the agent naturally asks for one missing field at a time — destination, dates, group size, contact, wishes — without inventing anything the client didn't say.
+- **"Заявки" (Leads) section** — cards for every collected lead with a status (new/in progress/closed), source, and data completeness; a manager gets a Telegram notification on every new lead and can take it into work right from the panel.
 - **Uptime monitoring** — an automated check every 10 minutes, with an email alert on downtime.
 
 The full roadmap (Instagram analytics, an AI agent for DMs and comments, lead intake and tracking, content publishing, the agency's own website) lives on the interactive roadmap site: **[roadmap-platform.oresh.in](https://roadmap-platform.oresh.in)**.
