@@ -14,13 +14,15 @@ import {
 
 const MODULE_NAV_ITEMS = [
   { href: "/panel/connections", label: "Подключения", icon: LinkIcon },
-  { href: "/panel/scenarios", label: "Сценарии", icon: ChatBubbleLeftRightIcon },
   { href: "/panel/inbox", label: "Инбокс", icon: InboxIcon },
   { href: "/panel/analytics", label: "Аналитика", icon: ChartBarIcon },
   { href: "/panel/content", label: "Контент", icon: PhotoIcon },
 ];
 
-const ADMIN_NAV_ITEM = { href: "/panel/users", label: "Пользователи", icon: UsersIcon };
+const ADMIN_NAV_ITEMS = [
+  { href: "/panel/scenarios", label: "Агент", icon: ChatBubbleLeftRightIcon },
+  { href: "/panel/users", label: "Пользователи", icon: UsersIcon },
+];
 const PROFILE_NAV_ITEM = { href: "/panel/profile", label: "Профиль", icon: UserCircleIcon };
 
 export function PanelNav({
@@ -33,7 +35,7 @@ export function PanelNav({
   const pathname = usePathname();
 
   const mainItems = MODULE_NAV_ITEMS;
-  const secondaryItems = [...(isAdmin ? [ADMIN_NAV_ITEM] : []), PROFILE_NAV_ITEM];
+  const secondaryItems = [...(isAdmin ? ADMIN_NAV_ITEMS : []), PROFILE_NAV_ITEM];
 
   if (direction === "horizontal") {
     return (

@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 
 const TITLES: Record<string, string> = {
   connections: "Подключения",
-  scenarios: "Сценарии",
+  scenarios: "Агент",
   inbox: "Инбокс",
   analytics: "Аналитика",
   content: "Контент",
