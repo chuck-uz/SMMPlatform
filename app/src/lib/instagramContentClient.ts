@@ -3,6 +3,13 @@ const MEDIA_FIELDS =
   "id,caption,media_type,media_product_type,permalink,timestamp,like_count,comments_count";
 const COMMENT_FIELDS = "id,text,username,timestamp";
 
+interface RawComment {
+  id: string;
+  text?: string;
+  username?: string;
+  timestamp: string;
+}
+
 const ACCOUNT_METRICS = "reach,profile_views,accounts_engaged,total_interactions,website_clicks";
 const MEDIA_METRICS: Record<string, string> = {
   FEED: "reach,likes,comments,saved,shares,total_interactions",
@@ -32,8 +39,23 @@ export const instagramContentClient = {
     const url = new URL(`${GRAPH_BASE}/${mediaId}/comments`);
     url.searchParams.set("fields", COMMENT_FIELDS);
     url.searchParams.set("access_token", accessToken);
-    const data = await fetchJson(url);
-    return data.data ?? [];
+
+    // A single page can miss the newest comment on posts with a large comment
+    // history, so follow paging.next until exhausted (capped to avoid an
+    // unbounded loop on pathological data).
+    const comments: RawComment[] = [];
+    let nextUrl: URL | null = url;
+    let pageCount = 0;
+    const MAX_PAGES = 20;
+
+    while (nextUrl && pageCount < MAX_PAGES) {
+      const data = await fetchJson(nextUrl);
+      comments.push(...(data.data ?? []));
+      nextUrl = data.paging?.next ? new URL(data.paging.next) : null;
+      pageCount += 1;
+    }
+
+    return comments;
   },
 
   async getAccountInsights({ accessToken }: { accessToken: string }) {
