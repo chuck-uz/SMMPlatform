@@ -20,8 +20,8 @@ async function fetchJson(url: URL) {
 }
 
 export const instagramContentClient = {
-  async listMedia({ accessToken, instagramUserId }: { accessToken: string; instagramUserId: string }) {
-    const url = new URL(`${GRAPH_BASE}/${instagramUserId}/media`);
+  async listMedia({ accessToken }: { accessToken: string }) {
+    const url = new URL(`${GRAPH_BASE}/me/media`);
     url.searchParams.set("fields", MEDIA_FIELDS);
     url.searchParams.set("access_token", accessToken);
     const data = await fetchJson(url);
@@ -36,8 +36,8 @@ export const instagramContentClient = {
     return data.data ?? [];
   },
 
-  async getAccountInsights({ accessToken, instagramUserId }: { accessToken: string; instagramUserId: string }) {
-    const url = new URL(`${GRAPH_BASE}/${instagramUserId}/insights`);
+  async getAccountInsights({ accessToken }: { accessToken: string }) {
+    const url = new URL(`${GRAPH_BASE}/me/insights`);
     url.searchParams.set("metric", ACCOUNT_METRICS);
     url.searchParams.set("period", "day");
     url.searchParams.set("access_token", accessToken);
