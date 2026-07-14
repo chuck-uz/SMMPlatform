@@ -46,7 +46,7 @@ export default async function ConnectionsPage({
   const pollerStatsByAccount = new Map(
     await Promise.all(
       accounts.map(async (account) => {
-        const [mediaAgg, commentAgg, metricAgg] = await Promise.all([
+        const [mediaAgg, commentAgg, metricAgg, demographicsAgg, latestAccountSnapshot] = await Promise.all([
           prisma.instagramMedia.aggregate({
             where: { accountId: account.id },
             _count: true,
@@ -58,11 +58,23 @@ export default async function ConnectionsPage({
             _max: { createdAt: true },
           }),
           prisma.instagramMetricSnapshot.aggregate({
-            where: { accountId: account.id },
+            where: { accountId: account.id, scope: { not: "demographics" } },
             _count: true,
             _max: { capturedAt: true },
           }),
+          prisma.instagramMetricSnapshot.aggregate({
+            where: { accountId: account.id, scope: "demographics" },
+            _count: true,
+            _max: { capturedAt: true },
+          }),
+          prisma.instagramMetricSnapshot.findFirst({
+            where: { accountId: account.id, scope: "account" },
+            orderBy: { capturedAt: "desc" },
+            select: { metrics: true },
+          }),
         ]);
+        const followerCount =
+          (latestAccountSnapshot?.metrics as Record<string, number> | undefined)?.followerCount ?? null;
         return [
           account.id,
           {
@@ -72,6 +84,9 @@ export default async function ConnectionsPage({
             commentLast: commentAgg._max.createdAt,
             metricCount: metricAgg._count,
             metricLast: metricAgg._max.capturedAt,
+            demographicsCount: demographicsAgg._count,
+            demographicsLast: demographicsAgg._max.capturedAt,
+            followerCount,
           },
         ] as const;
       }),
@@ -160,7 +175,12 @@ export default async function ConnectionsPage({
                     <div className="px-[22px] pb-3 text-[11.5px] text-subtle">
                       Сбор данных: медиа — {stats.mediaCount} ({formatRelativeTime(stats.mediaLast, now)}) ·
                       комментарии — {stats.commentCount} ({formatRelativeTime(stats.commentLast, now)}) ·
-                      метрики — {stats.metricCount} ({formatRelativeTime(stats.metricLast, now)})
+                      метрики — {stats.metricCount} ({formatRelativeTime(stats.metricLast, now)}) · демография —{" "}
+                      {stats.followerCount !== null && stats.followerCount < 100
+                        ? `недоступна (${stats.followerCount} подписчиков, нужно 100+)`
+                        : stats.demographicsCount > 0
+                          ? `собрана (${formatRelativeTime(stats.demographicsLast, now)})`
+                          : "ещё не собрана"}
                     </div>
                   )}
                 </div>
