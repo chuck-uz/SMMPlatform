@@ -49,7 +49,7 @@ model InstagramMedia {
   id                String   @id @default(cuid())
   instagramMediaId  String   @unique
   accountId         String
-  account           InstagramAccount @relation(fields: [accountId], references: [id])
+  account           InstagramAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
   mediaType         String
   mediaProductType  String?
   caption           String?
@@ -70,7 +70,7 @@ model InstagramComment {
   id                  String   @id @default(cuid())
   instagramCommentId  String   @unique
   mediaId             String
-  media               InstagramMedia @relation(fields: [mediaId], references: [id])
+  media               InstagramMedia @relation(fields: [mediaId], references: [id], onDelete: Cascade)
   text                String
   username            String?
   postedAt            DateTime
@@ -87,9 +87,9 @@ model InstagramComment {
 model InstagramMetricSnapshot {
   id          String   @id @default(cuid())
   accountId   String
-  account     InstagramAccount @relation(fields: [accountId], references: [id])
+  account     InstagramAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
   mediaId     String?
-  media       InstagramMedia? @relation(fields: [mediaId], references: [id])
+  media       InstagramMedia? @relation(fields: [mediaId], references: [id], onDelete: Cascade)
   scope       String
   metrics     Json
   capturedAt  DateTime @default(now())
@@ -100,7 +100,7 @@ model InstagramMetricSnapshot {
 model AccountInsightReport {
   id          String   @id @default(cuid())
   accountId   String
-  account     InstagramAccount @relation(fields: [accountId], references: [id])
+  account     InstagramAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
   periodFrom  DateTime
   periodTo    DateTime
   trigger     String
