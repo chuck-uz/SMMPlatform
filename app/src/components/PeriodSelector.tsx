@@ -29,6 +29,7 @@ export function PeriodSelector({
   return (
     <form action="/panel/analytics" method="GET" className="flex flex-wrap items-end gap-3">
       <input type="hidden" name="account" value={accountId} />
+      <input type="hidden" name="tab" value="summary" />
       <div>
         <label className={fieldLabelClass}>Период</label>
         <select
