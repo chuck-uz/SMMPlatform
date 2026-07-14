@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { daysUntilExpiry } from "@/lib/instagramOAuth";
 import { DisconnectInstagramButton } from "@/components/DisconnectInstagramButton";
 import { ClaudeApiKeyForm } from "@/components/ClaudeApiKeyForm";
+import { TelegramBotForm } from "@/components/TelegramBotForm";
+import { TelegramRecipientsList } from "@/components/TelegramRecipientsList";
 
 const ERROR_MESSAGES: Record<string, string> = {
   oauth_state: "Не удалось подтвердить запрос авторизации — попробуйте подключить аккаунт заново.",
@@ -36,6 +38,12 @@ export default async function ConnectionsPage({
   const claudeConfig = isAdmin
     ? await prisma.claudeApiKeyConfig.findUnique({ where: { singleton: "claude" } })
     : null;
+  const telegramConfig = isAdmin
+    ? await prisma.telegramBotConfig.findUnique({ where: { singleton: "telegram" } })
+    : null;
+  const telegramRecipients = isAdmin
+    ? await prisma.telegramNotificationRecipient.findMany({ orderBy: { createdAt: "asc" } })
+    : [];
 
   const accounts = await prisma.instagramAccount.findMany({
     orderBy: { createdAt: "asc" },
@@ -199,6 +207,16 @@ export default async function ConnectionsPage({
           </p>
           <div className="mt-3 max-w-[1020px] rounded-[14px] border border-border bg-card p-5 shadow-card">
             <ClaudeApiKeyForm hasKey={!!claudeConfig} verified={claudeConfig?.verified ?? false} />
+          </div>
+
+          <h2 className="mt-9 text-[13.5px] font-semibold text-foreground">Telegram-бот</h2>
+          <p className="mt-1 max-w-[640px] text-[12.5px] leading-relaxed text-muted-foreground">
+            Уведомления о новых заявках рассылаются получателям из white list ниже. Chat_id
+            получателя можно узнать, например, у @userinfobot в Telegram.
+          </p>
+          <div className="mt-3 max-w-[1020px] rounded-[14px] border border-border bg-card p-5 shadow-card">
+            <TelegramBotForm hasToken={!!telegramConfig} verified={telegramConfig?.verified ?? false} />
+            <TelegramRecipientsList recipients={telegramRecipients} />
           </div>
         </>
       )}

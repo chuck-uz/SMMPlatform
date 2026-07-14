@@ -6,6 +6,7 @@ const TITLES: Record<string, string> = {
   connections: "Подключения",
   scenarios: "Агент",
   inbox: "Инбокс",
+  leads: "Заявки",
   analytics: "Аналитика",
   content: "Контент",
   users: "Пользователи",

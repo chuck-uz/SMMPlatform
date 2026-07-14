@@ -164,9 +164,32 @@ model Lead {
   budget         String?
   contact        String?
   wishes         String?
-  status         String   @default("partial")
+  completeness   String   @default("partial")
+  status         String   @default("new")
+  source         String
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   @@map("leads")
+}
+
+model TelegramBotConfig {
+  id               String    @id @default(cuid())
+  singleton        String    @unique @default("telegram")
+  encryptedBotToken String
+  verified         Boolean   @default(false)
+  verifiedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@map("telegram_bot_config")
+}
+
+model TelegramNotificationRecipient {
+  id        String   @id @default(cuid())
+  chatId    String   @unique
+  label     String?
+  createdAt DateTime @default(now())
+
+  @@map("telegram_notification_recipients")
 }

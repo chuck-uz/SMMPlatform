@@ -6,6 +6,7 @@ import {
   LinkIcon,
   ChatBubbleLeftRightIcon,
   InboxIcon,
+  ClipboardDocumentListIcon,
   ChartBarIcon,
   PhotoIcon,
   UsersIcon,
@@ -15,6 +16,7 @@ import {
 const MODULE_NAV_ITEMS = [
   { href: "/panel/connections", label: "Подключения", icon: LinkIcon },
   { href: "/panel/inbox", label: "Инбокс", icon: InboxIcon },
+  { href: "/panel/leads", label: "Заявки", icon: ClipboardDocumentListIcon },
   { href: "/panel/analytics", label: "Аналитика", icon: ChartBarIcon },
   { href: "/panel/content", label: "Контент", icon: PhotoIcon },
 ];
