@@ -14,6 +14,16 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 const EXPIRY_WARNING_THRESHOLD_DAYS = 7;
 
+function formatRelativeTime(date: Date | null, now: Date): string {
+  if (!date) return "ещё не было";
+  const diffMin = Math.floor((now.getTime() - date.getTime()) / 60000);
+  if (diffMin < 1) return "только что";
+  if (diffMin < 60) return `${diffMin} мин назад`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `${diffHours} ч назад`;
+  return `${Math.floor(diffHours / 24)} дн назад`;
+}
+
 export default async function ConnectionsPage({
   searchParams,
 }: {
@@ -32,6 +42,41 @@ export default async function ConnectionsPage({
     select: { id: true, username: true, tokenExpiresAt: true },
   });
   const now = new Date();
+
+  const pollerStatsByAccount = new Map(
+    await Promise.all(
+      accounts.map(async (account) => {
+        const [mediaAgg, commentAgg, metricAgg] = await Promise.all([
+          prisma.instagramMedia.aggregate({
+            where: { accountId: account.id },
+            _count: true,
+            _max: { updatedAt: true },
+          }),
+          prisma.instagramComment.aggregate({
+            where: { media: { accountId: account.id } },
+            _count: true,
+            _max: { createdAt: true },
+          }),
+          prisma.instagramMetricSnapshot.aggregate({
+            where: { accountId: account.id },
+            _count: true,
+            _max: { capturedAt: true },
+          }),
+        ]);
+        return [
+          account.id,
+          {
+            mediaCount: mediaAgg._count,
+            mediaLast: mediaAgg._max.updatedAt,
+            commentCount: commentAgg._count,
+            commentLast: commentAgg._max.createdAt,
+            metricCount: metricAgg._count,
+            metricLast: metricAgg._max.capturedAt,
+          },
+        ] as const;
+      }),
+    ),
+  );
 
   return (
     <div className="p-6 sm:p-8 sm:px-10">
@@ -72,45 +117,52 @@ export default async function ConnectionsPage({
               const days = daysUntilExpiry(account.tokenExpiresAt, now);
               const isExpiringSoon = days <= EXPIRY_WARNING_THRESHOLD_DAYS;
               const pct = Math.max(0, Math.min(100, Math.round((days / 60) * 100)));
+              const stats = pollerStatsByAccount.get(account.id);
 
               return (
-                <div
-                  key={account.id}
-                  className="grid grid-cols-[1fr_230px_150px_110px] items-center gap-4 border-t border-border px-[22px] py-4 first:border-t-0"
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-pink-400 via-purple-500 to-indigo-500 text-[15px] font-bold text-white">
-                      @
+                <div key={account.id} className="border-t border-border first:border-t-0">
+                  <div className="grid grid-cols-[1fr_230px_150px_110px] items-center gap-4 px-[22px] py-4">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-pink-400 via-purple-500 to-indigo-500 text-[15px] font-bold text-white">
+                        @
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-foreground">@{account.username}</div>
+                        <div className="mt-0.5 text-[12.5px] text-subtle">Instagram · Meta OAuth</div>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-foreground">@{account.username}</div>
-                      <div className="mt-0.5 text-[12.5px] text-subtle">Instagram · Meta OAuth</div>
+                    <div>
+                      <div className="mb-1.5 text-[12.5px] text-muted-foreground">
+                        {days >= 0 ? `Доступ действует ещё ${days} дн.` : "Срок доступа истёк"}
+                      </div>
+                      <div className="h-[5px] overflow-hidden rounded-full bg-muted">
+                        <div
+                          className={`h-full rounded-full ${isExpiringSoon ? "bg-warning" : "bg-accent"}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
                     </div>
+                    <span
+                      className={`inline-flex w-fit items-center gap-1.5 rounded-full px-[11px] py-[5px] text-[12.5px] font-semibold ${
+                        isExpiringSoon ? "bg-warning/10 text-warning" : "bg-accent/10 text-accent-hover"
+                      }`}
+                    >
+                      {isExpiringSoon ? (
+                        <ExclamationTriangleIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                      ) : (
+                        <CheckCircleIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                      )}
+                      {isExpiringSoon ? "Скоро истекает" : "Подключено"}
+                    </span>
+                    <DisconnectInstagramButton accountId={account.id} />
                   </div>
-                  <div>
-                    <div className="mb-1.5 text-[12.5px] text-muted-foreground">
-                      {days >= 0 ? `Доступ действует ещё ${days} дн.` : "Срок доступа истёк"}
+                  {stats && (
+                    <div className="px-[22px] pb-3 text-[11.5px] text-subtle">
+                      Сбор данных: медиа — {stats.mediaCount} ({formatRelativeTime(stats.mediaLast, now)}) ·
+                      комментарии — {stats.commentCount} ({formatRelativeTime(stats.commentLast, now)}) ·
+                      метрики — {stats.metricCount} ({formatRelativeTime(stats.metricLast, now)})
                     </div>
-                    <div className="h-[5px] overflow-hidden rounded-full bg-muted">
-                      <div
-                        className={`h-full rounded-full ${isExpiringSoon ? "bg-warning" : "bg-accent"}`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                  <span
-                    className={`inline-flex w-fit items-center gap-1.5 rounded-full px-[11px] py-[5px] text-[12.5px] font-semibold ${
-                      isExpiringSoon ? "bg-warning/10 text-warning" : "bg-accent/10 text-accent-hover"
-                    }`}
-                  >
-                    {isExpiringSoon ? (
-                      <ExclamationTriangleIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                    ) : (
-                      <CheckCircleIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                    )}
-                    {isExpiringSoon ? "Скоро истекает" : "Подключено"}
-                  </span>
-                  <DisconnectInstagramButton accountId={account.id} />
+                  )}
                 </div>
               );
             })
