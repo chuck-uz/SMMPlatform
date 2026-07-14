@@ -91,6 +91,8 @@ All application code lives in `app/src`.
 | `lib/leadNotify.ts` | Pure function `buildLeadNotificationText` (LEAD2): formats a `Lead` into the Telegram message text. Fully unit-tested. |
 | `lib/telegramBot.ts` | Pure, dependency-injected `connectTelegramBot` (LEAD2): verifies a bot token via an injected client, then encrypts it — mirrors `claudeApiKey.ts`. Fully unit-tested. |
 | `lib/telegramClient.ts` | The real Telegram Bot API calls (LEAD2): `verifyToken` (`getMe`) and `sendTelegramMessage` (`sendMessage`). Not unit-tested, same boundary treatment as `claudeApiClient.ts`. |
+| `lib/growthInsights.ts` | Pure functions for the growth-insight report (GROW1): `buildMediaFormatEngagements`/`buildFormatBreakdown` (engagement rolled up per media format — Reels/carousel/photo/video — gated at 3+ samples per format), `buildReachTrend` (first-half vs second-half split of a 90-day window, gated at 6+ daily points), `buildDemandSignal` (leads grouped by destination; `available: false` when there are no leads yet), `buildGrowthPrompt`/`parseGrowthContent` (prompt assembly and defensive response validation), `shouldSkipManualGrowthAnalysis` (5-minute cooldown), `isGrowthDigestDue` (30-day gate). Fully unit-tested, independent of `analysisReport.ts`. |
+| `lib/claudeGrowthClient.ts` | The real call to `claude-sonnet-5` (GROW1) with `output_config.format` (JSON Schema: `bottlenecks`/`direction`/`growthPriorities`) and a system prompt that explicitly requires saying so when an input section is insufficient rather than inventing one. Not unit-tested, same boundary treatment as `claudeAnalysisClient.ts`. |
 | `lib/prisma.ts` | Prisma client singleton, constructed with the `@prisma/adapter-pg` driver adapter. |
 | `components/*` | Client components for panel interactivity (forms, toggles, nav) — thin, calling server actions via `useTransition`. |
 
@@ -153,6 +155,11 @@ Prisma models (`app/prisma/schema.prisma`):
   same shape as `ClaudeApiKeyConfig`.
 - **`TelegramNotificationRecipient`** — a manually-entered whitelist of
   `chatId`s (+ optional `label`) that get a message on every new `Lead`.
+- **`GrowthInsightReport`** — append-only, one row per growth-insight run
+  (`trigger`: `manual`/`digest`, `content` JSON: `bottlenecks`/`direction`/
+  `growthPriorities`, `periodFrom`/`periodTo`, always a 90-day window).
+  Structurally identical to `AiAnalysisReport` but a separate table/entity —
+  the two reports are independently triggered and don't share a schema.
 
 ## 5. Key decisions
 
@@ -270,3 +277,34 @@ Prisma models (`app/prisma/schema.prisma`):
   Telegram Bot API constraint, not a bug. The "Отправить тестовое сообщение"
   button in `/panel/connections` exists specifically because there's no
   live channel yet to prove end-to-end delivery any other way.
+- **The growth-insight report (GROW1) is a fully independent entity, not an
+  extension of `AiAnalysisReport` (AN4).** Both follow the same
+  summary/pure-functions/Claude-call/append-only-table shape, but live as
+  separate models, prompts, and triggers — a deliberate revision made
+  mid-grilling after initially planning to bolt new fields onto AN4's
+  existing schema. Keeps the two reports free to evolve (or fail) on their
+  own without coupling their JSON shapes.
+- **GROW1 always analyzes a fixed 90-day window, independent of whatever
+  period the AN3/AN4 summary above it has selected.** Bottleneck/direction/
+  priority signals need a longer, stable baseline than a 7-day filter can
+  give; tying the window to the UI's period selector would make the report
+  flicker with whatever the user last clicked.
+- **Reach trend uses a first-half-vs-second-half split within the 90-day
+  window, not a comparison against the prior 90-day period.** The account
+  (`@chuck_uz`) is only a few weeks old — a prior-period comparison would
+  stay empty for months. Splitting the current window in two produces a
+  usable trend signal much sooner, at the cost of a shorter effective
+  baseline per half.
+- **`buildDemandSignal` degrades to an explicit "no data yet" flag
+  (`available: false`) instead of a partial/empty computation.** There is no
+  live lead-generating channel yet (`CM1`/`DM1`/`WEB5` are all `todo`), and
+  the sandbox deliberately never creates real `Lead` rows (see LEAD1), so
+  `leads` is empty in production today. The system prompt tells Claude to
+  say so plainly rather than reason about an empty destination list as if
+  it meant "no demand." Verified on prod: the first real run correctly
+  reported all three input sections (`formatBreakdown`, `reachTrend`,
+  `demandSignal`) as insufficient, without inventing numbers.
+- **GROW1 has its own trigger and cadence (5-minute manual cooldown, 30-day
+  digest), separate from AN4's weekly one.** A 90-day-window strategic
+  report doesn't move week to week the way a metrics summary does; a
+  monthly cadence matches how often its conclusions can plausibly change.
