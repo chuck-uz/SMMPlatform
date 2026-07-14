@@ -38,7 +38,57 @@ model InstagramAccount {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
+  media            InstagramMedia[]
+  metricSnapshots  InstagramMetricSnapshot[]
+
   @@map("instagram_accounts")
+}
+
+model InstagramMedia {
+  id                String   @id @default(cuid())
+  instagramMediaId  String   @unique
+  accountId         String
+  account           InstagramAccount @relation(fields: [accountId], references: [id])
+  mediaType         String
+  mediaProductType  String?
+  caption           String?
+  permalink         String?
+  postedAt          DateTime
+  likeCount         Int      @default(0)
+  commentsCount     Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  comments          InstagramComment[]
+  metricSnapshots   InstagramMetricSnapshot[]
+
+  @@map("instagram_media")
+}
+
+model InstagramComment {
+  id                  String   @id @default(cuid())
+  instagramCommentId  String   @unique
+  mediaId             String
+  media               InstagramMedia @relation(fields: [mediaId], references: [id])
+  text                String
+  username            String?
+  postedAt            DateTime
+  createdAt           DateTime @default(now())
+
+  @@map("instagram_comments")
+}
+
+model InstagramMetricSnapshot {
+  id          String   @id @default(cuid())
+  accountId   String
+  account     InstagramAccount @relation(fields: [accountId], references: [id])
+  mediaId     String?
+  media       InstagramMedia? @relation(fields: [mediaId], references: [id])
+  scope       String
+  metrics     Json
+  capturedAt  DateTime @default(now())
+
+  @@map("instagram_metric_snapshots")
 }
 
 model ClaudeApiKeyConfig {
