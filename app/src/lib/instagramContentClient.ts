@@ -3,7 +3,7 @@ const MEDIA_FIELDS =
   "id,caption,media_type,media_product_type,permalink,timestamp,like_count,comments_count";
 const COMMENT_FIELDS = "id,text,username,timestamp";
 
-const ACCOUNT_METRICS = "reach,profile_views,accounts_engaged,total_interactions";
+const ACCOUNT_METRICS = "reach,profile_views,accounts_engaged,total_interactions,website_clicks";
 const MEDIA_METRICS: Record<string, string> = {
   FEED: "reach,likes,comments,saved,shares,total_interactions",
   REELS: "reach,likes,comments,saved,shares,plays,total_interactions",
@@ -42,6 +42,35 @@ export const instagramContentClient = {
     url.searchParams.set("period", "day");
     url.searchParams.set("access_token", accessToken);
     return fetchJson(url);
+  },
+
+  async getAccountProfile({ accessToken }: { accessToken: string }) {
+    const url = new URL(`${GRAPH_BASE}/me`);
+    url.searchParams.set("fields", "followers_count");
+    url.searchParams.set("access_token", accessToken);
+    return fetchJson(url);
+  },
+
+  async getAudienceDemographics({ accessToken }: { accessToken: string }) {
+    const ageGenderUrl = new URL(`${GRAPH_BASE}/me/insights`);
+    ageGenderUrl.searchParams.set("metric", "follower_demographics");
+    ageGenderUrl.searchParams.set("period", "lifetime");
+    ageGenderUrl.searchParams.set("metric_type", "total_value");
+    ageGenderUrl.searchParams.set("breakdown", "age,gender");
+    ageGenderUrl.searchParams.set("access_token", accessToken);
+
+    const geographyUrl = new URL(`${GRAPH_BASE}/me/insights`);
+    geographyUrl.searchParams.set("metric", "follower_demographics");
+    geographyUrl.searchParams.set("period", "lifetime");
+    geographyUrl.searchParams.set("metric_type", "total_value");
+    geographyUrl.searchParams.set("breakdown", "country");
+    geographyUrl.searchParams.set("access_token", accessToken);
+
+    const [ageGender, geography] = await Promise.all([
+      fetchJson(ageGenderUrl),
+      fetchJson(geographyUrl),
+    ]);
+    return { ageGender, geography };
   },
 
   async getMediaInsights({

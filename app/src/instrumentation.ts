@@ -1,3 +1,5 @@
+import type { Prisma } from "@/generated/prisma/client";
+
 const TOKEN_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const REFRESH_THRESHOLD_DAYS = 7;
 
@@ -13,8 +15,16 @@ export async function register() {
   const { refreshAccountToken, daysUntilExpiry } = await import("@/lib/instagramOAuth");
   const { instagramApiClient } = await import("@/lib/instagramApiClient");
   const { instagramContentClient } = await import("@/lib/instagramContentClient");
-  const { normalizeMedia, normalizeComment, flattenInsights, buildMetricSnapshot, isActiveStory } =
-    await import("@/lib/instagramPoller");
+  const {
+    normalizeMedia,
+    normalizeComment,
+    flattenInsights,
+    buildMetricSnapshot,
+    isActiveStory,
+    normalizeFollowerCount,
+    shouldFetchDemographics,
+    buildDemographicsMetrics,
+  } = await import("@/lib/instagramPoller");
   const { encrypt, decrypt } = await import("@/lib/encryption");
 
   async function refreshExpiringTokens() {
@@ -116,14 +126,29 @@ export async function register() {
         const accessToken = decrypt(account.accessToken, encryptionKey);
 
         const accountInsights = await instagramContentClient.getAccountInsights({ accessToken });
+        const profile = await instagramContentClient.getAccountProfile({ accessToken });
+        const followerCount = normalizeFollowerCount(profile);
+
         await prisma.instagramMetricSnapshot.create({
           data: buildMetricSnapshot({
-            metrics: flattenInsights(accountInsights),
+            metrics: { ...flattenInsights(accountInsights), followerCount },
             scope: "account",
             accountId: account.id,
             now,
-          }),
+          }) as Prisma.InstagramMetricSnapshotUncheckedCreateInput,
         });
+
+        if (shouldFetchDemographics(followerCount)) {
+          const demographics = await instagramContentClient.getAudienceDemographics({ accessToken });
+          await prisma.instagramMetricSnapshot.create({
+            data: buildMetricSnapshot({
+              metrics: buildDemographicsMetrics(demographics),
+              scope: "demographics",
+              accountId: account.id,
+              now,
+            }) as Prisma.InstagramMetricSnapshotUncheckedCreateInput,
+          });
+        }
 
         for (const media of account.media) {
           if (media.mediaProductType === "STORY") continue;
@@ -140,7 +165,7 @@ export async function register() {
               accountId: account.id,
               mediaId: media.id,
               now,
-            }),
+            }) as Prisma.InstagramMetricSnapshotUncheckedCreateInput,
           });
         }
       } catch (error) {
@@ -176,7 +201,7 @@ export async function register() {
               accountId: account.id,
               mediaId: story.id,
               now,
-            }),
+            }) as Prisma.InstagramMetricSnapshotUncheckedCreateInput,
           });
         }
       } catch (error) {

@@ -20,6 +20,10 @@ interface RawInsights {
   data: Array<{ name: string; values: Array<{ value: number }> }>;
 }
 
+interface RawBreakdownInsights {
+  data?: unknown[];
+}
+
 export function normalizeMedia(raw: RawMedia, accountId: string) {
   return {
     instagramMediaId: String(raw.id),
@@ -54,8 +58,8 @@ export function flattenInsights(raw: RawInsights): Record<string, number> {
 }
 
 export function buildMetricSnapshot(params: {
-  metrics: Record<string, number>;
-  scope: "account" | "media" | "story";
+  metrics: Record<string, unknown>;
+  scope: "account" | "media" | "story" | "demographics";
   accountId: string;
   mediaId?: string | null;
   now?: Date;
@@ -76,4 +80,42 @@ export function isActiveStory(
   if (media.mediaProductType !== "STORY") return false;
   const ageMs = now.getTime() - media.postedAt.getTime();
   return ageMs < 24 * 60 * 60 * 1000;
+}
+
+const DEMOGRAPHICS_FOLLOWER_THRESHOLD = 100;
+
+export function normalizeFollowerCount(raw: { followers_count?: number }): number {
+  return raw.followers_count ?? 0;
+}
+
+export function shouldFetchDemographics(followerCount: number): boolean {
+  return followerCount >= DEMOGRAPHICS_FOLLOWER_THRESHOLD;
+}
+
+export function buildDemographicsMetrics(params: {
+  ageGender: RawBreakdownInsights;
+  geography: RawBreakdownInsights;
+}) {
+  return {
+    ageGender: params.ageGender.data ?? [],
+    geography: params.geography.data ?? [],
+  };
+}
+
+export function dailyHistory(
+  snapshots: Array<{ capturedAt: Date; metrics: Record<string, unknown> }>,
+): Array<{ date: string; metrics: Record<string, unknown> }> {
+  const latestByDay = new Map<string, { capturedAt: Date; metrics: Record<string, unknown> }>();
+
+  for (const snapshot of snapshots) {
+    const date = snapshot.capturedAt.toISOString().slice(0, 10);
+    const existing = latestByDay.get(date);
+    if (!existing || snapshot.capturedAt.getTime() > existing.capturedAt.getTime()) {
+      latestByDay.set(date, snapshot);
+    }
+  }
+
+  return [...latestByDay.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, snapshot]) => ({ date, metrics: snapshot.metrics }));
 }

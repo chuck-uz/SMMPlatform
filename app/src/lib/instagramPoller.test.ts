@@ -5,6 +5,10 @@ import {
   flattenInsights,
   buildMetricSnapshot,
   isActiveStory,
+  normalizeFollowerCount,
+  shouldFetchDemographics,
+  buildDemographicsMetrics,
+  dailyHistory,
 } from "./instagramPoller";
 
 describe("normalizeMedia", () => {
@@ -118,6 +122,74 @@ describe("buildMetricSnapshot", () => {
     });
 
     expect(snapshot.mediaId).toBe("media-1");
+  });
+});
+
+describe("normalizeFollowerCount", () => {
+  it("reads followers_count from the account profile response", () => {
+    expect(normalizeFollowerCount({ followers_count: 217 })).toBe(217);
+  });
+
+  it("defaults to 0 when missing", () => {
+    expect(normalizeFollowerCount({})).toBe(0);
+  });
+});
+
+describe("shouldFetchDemographics", () => {
+  it("is true at or above the 100-follower threshold", () => {
+    expect(shouldFetchDemographics(100)).toBe(true);
+    expect(shouldFetchDemographics(217)).toBe(true);
+  });
+
+  it("is false below the threshold", () => {
+    expect(shouldFetchDemographics(99)).toBe(false);
+    expect(shouldFetchDemographics(0)).toBe(false);
+  });
+});
+
+describe("buildDemographicsMetrics", () => {
+  it("combines age/gender and geography insights responses", () => {
+    const ageGender = { data: [{ name: "follower_demographics", values: [{ value: { "F.25-34": 12 } }] }] };
+    const geography = { data: [{ name: "follower_demographics", values: [{ value: { UZ: 20 } }] }] };
+
+    const result = buildDemographicsMetrics({ ageGender, geography });
+
+    expect(result).toEqual({ ageGender: ageGender.data, geography: geography.data });
+  });
+
+  it("defaults to empty arrays when data is missing", () => {
+    expect(buildDemographicsMetrics({ ageGender: {}, geography: {} })).toEqual({
+      ageGender: [],
+      geography: [],
+    });
+  });
+});
+
+describe("dailyHistory", () => {
+  it("keeps only the latest snapshot per calendar day (UTC)", () => {
+    const snapshots = [
+      { capturedAt: new Date("2026-07-10T08:00:00Z"), metrics: { reach: 100 } },
+      { capturedAt: new Date("2026-07-10T20:00:00Z"), metrics: { reach: 140 } },
+      { capturedAt: new Date("2026-07-11T09:00:00Z"), metrics: { reach: 150 } },
+    ];
+
+    expect(dailyHistory(snapshots)).toEqual([
+      { date: "2026-07-10", metrics: { reach: 140 } },
+      { date: "2026-07-11", metrics: { reach: 150 } },
+    ]);
+  });
+
+  it("returns an empty array for no snapshots", () => {
+    expect(dailyHistory([])).toEqual([]);
+  });
+
+  it("sorts output ascending by date regardless of input order", () => {
+    const snapshots = [
+      { capturedAt: new Date("2026-07-12T08:00:00Z"), metrics: { reach: 1 } },
+      { capturedAt: new Date("2026-07-10T08:00:00Z"), metrics: { reach: 2 } },
+    ];
+
+    expect(dailyHistory(snapshots).map((d) => d.date)).toEqual(["2026-07-10", "2026-07-12"]);
   });
 });
 
