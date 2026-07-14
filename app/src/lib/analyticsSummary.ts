@@ -1,0 +1,237 @@
+import { ACCOUNT_METRIC_LABELS } from "./analyticsDashboard";
+
+export type PeriodPreset = "7d" | "30d" | "90d" | "custom";
+
+const PRESET_DAYS: Record<"7d" | "30d" | "90d", number> = { "7d": 7, "30d": 30, "90d": 90 };
+
+export interface PeriodRange {
+  from: Date;
+  to: Date;
+  previousFrom: Date;
+  previousTo: Date;
+}
+
+export function resolvePeriodRange(
+  params: { preset: PeriodPreset; from?: string; to?: string },
+  now: Date,
+): PeriodRange {
+  let from: Date;
+  let to: Date;
+
+  if (params.preset === "custom" && params.from && params.to) {
+    from = new Date(params.from);
+    to = new Date(params.to);
+  } else {
+    const days = PRESET_DAYS[params.preset as "7d" | "30d" | "90d"] ?? PRESET_DAYS["7d"];
+    to = now;
+    from = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  }
+
+  const durationMs = Math.max(0, to.getTime() - from.getTime());
+  const previousTo = new Date(from.getTime());
+  const previousFrom = new Date(from.getTime() - durationMs);
+
+  return { from, to, previousFrom, previousTo };
+}
+
+const FLOW_METRIC_KEYS = ["reach", "profile_views", "accounts_engaged", "total_interactions", "website_clicks"] as const;
+const STOCK_METRIC_KEYS = ["followerCount"] as const;
+
+export interface MetricDelta {
+  key: string;
+  label: string;
+  current: number;
+  previous: number;
+  changePercent: number | null;
+}
+
+function average(values: number[]): number {
+  if (values.length === 0) return 0;
+  return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+function sumMetric(points: Array<{ metrics: Record<string, unknown> }>, key: string): number {
+  return points.reduce((total, p) => total + (typeof p.metrics[key] === "number" ? (p.metrics[key] as number) : 0), 0);
+}
+
+function lastMetric(points: Array<{ metrics: Record<string, unknown> }>, key: string): number {
+  const value = points[points.length - 1]?.metrics[key];
+  return typeof value === "number" ? value : 0;
+}
+
+function changePercent(current: number, previous: number): number | null {
+  if (previous === 0) return null;
+  return ((current - previous) / previous) * 100;
+}
+
+export function buildMetricDeltas(
+  currentPoints: Array<{ metrics: Record<string, unknown> }>,
+  previousPoints: Array<{ metrics: Record<string, unknown> }>,
+): MetricDelta[] {
+  const stock = STOCK_METRIC_KEYS.map((key) => {
+    const current = lastMetric(currentPoints, key);
+    const previous = lastMetric(previousPoints, key);
+    return { key, label: ACCOUNT_METRIC_LABELS[key], current, previous, changePercent: changePercent(current, previous) };
+  });
+  const flow = FLOW_METRIC_KEYS.map((key) => {
+    const current = sumMetric(currentPoints, key);
+    const previous = sumMetric(previousPoints, key);
+    return { key, label: ACCOUNT_METRIC_LABELS[key], current, previous, changePercent: changePercent(current, previous) };
+  });
+  return [...stock, ...flow];
+}
+
+export interface MediaEngagement {
+  id: string;
+  caption: string | null;
+  mediaProductType: string | null;
+  postedAt: Date;
+  totalInteractions: number;
+}
+
+export function buildMediaEngagements(
+  media: Array<{ id: string; caption: string | null; mediaProductType: string | null; postedAt: Date }>,
+  latestMetricsByMediaId: Map<string, Record<string, unknown>>,
+): MediaEngagement[] {
+  return media
+    .filter((item) => item.mediaProductType === "FEED" || item.mediaProductType === "REELS")
+    .map((item) => {
+      const metrics = latestMetricsByMediaId.get(item.id);
+      const totalInteractions =
+        metrics && typeof metrics.total_interactions === "number" ? metrics.total_interactions : 0;
+      return {
+        id: item.id,
+        caption: item.caption,
+        mediaProductType: item.mediaProductType,
+        postedAt: item.postedAt,
+        totalInteractions,
+      };
+    });
+}
+
+export function rankMedia(engagements: MediaEngagement[]): { top: MediaEngagement[]; bottom: MediaEngagement[] } {
+  const sorted = [...engagements].sort((a, b) => b.totalInteractions - a.totalInteractions);
+  const top = sorted.slice(0, 3);
+  const remaining = sorted.slice(3);
+  const bottom = remaining.length > 0 ? remaining.slice(-3).reverse() : [];
+  return { top, bottom };
+}
+
+const MIN_BUCKET_SAMPLES = 3;
+
+export interface TimePatternBucket {
+  key: string;
+  label: string;
+  averageInteractions: number;
+  sampleSize: number;
+}
+
+const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+const WEEKDAY_LABELS: Record<number, string> = { 0: "Вс", 1: "Пн", 2: "Вт", 3: "Ср", 4: "Чт", 5: "Пт", 6: "Сб" };
+
+export function buildWeekdayPattern(engagements: MediaEngagement[]): TimePatternBucket[] {
+  const buckets = new Map<number, number[]>();
+  for (const engagement of engagements) {
+    const day = engagement.postedAt.getUTCDay();
+    const values = buckets.get(day) ?? [];
+    values.push(engagement.totalInteractions);
+    buckets.set(day, values);
+  }
+  return WEEKDAY_ORDER.map((day) => {
+    const values = buckets.get(day) ?? [];
+    return { key: String(day), label: WEEKDAY_LABELS[day], averageInteractions: average(values), sampleSize: values.length };
+  }).filter((bucket) => bucket.sampleSize >= MIN_BUCKET_SAMPLES);
+}
+
+const TIME_OF_DAY_BUCKETS: Array<{ key: string; label: string; matches: (hour: number) => boolean }> = [
+  { key: "morning", label: "Утро (6–12)", matches: (h) => h >= 6 && h < 12 },
+  { key: "afternoon", label: "День (12–18)", matches: (h) => h >= 12 && h < 18 },
+  { key: "evening", label: "Вечер (18–24)", matches: (h) => h >= 18 && h < 24 },
+  { key: "night", label: "Ночь (0–6)", matches: (h) => h >= 0 && h < 6 },
+];
+
+export function buildTimeOfDayPattern(engagements: MediaEngagement[]): TimePatternBucket[] {
+  return TIME_OF_DAY_BUCKETS.map((bucket) => {
+    const values = engagements
+      .filter((engagement) => bucket.matches(engagement.postedAt.getUTCHours()))
+      .map((engagement) => engagement.totalInteractions);
+    return { key: bucket.key, label: bucket.label, averageInteractions: average(values), sampleSize: values.length };
+  }).filter((bucket) => bucket.sampleSize >= MIN_BUCKET_SAMPLES);
+}
+
+const ANOMALY_THRESHOLD_PERCENT = 50;
+const MIN_ANOMALY_POINTS = 4;
+
+export interface Anomaly {
+  metricKey: string;
+  metricLabel: string;
+  date: string;
+  value: number;
+  average: number;
+  changePercent: number;
+}
+
+export function detectAnomalies(
+  dailyPoints: Array<{ date: string; metrics: Record<string, unknown> }>,
+  metricKeys: readonly string[] = [...STOCK_METRIC_KEYS, ...FLOW_METRIC_KEYS],
+): Anomaly[] {
+  if (dailyPoints.length < MIN_ANOMALY_POINTS) return [];
+
+  const anomalies: Anomaly[] = [];
+  for (const key of metricKeys) {
+    for (let i = 0; i < dailyPoints.length; i++) {
+      const others = dailyPoints.filter((_, idx) => idx !== i);
+      const avg = average(
+        others.map((p) => (typeof p.metrics[key] === "number" ? (p.metrics[key] as number) : 0)),
+      );
+      if (avg === 0) continue;
+      const value = typeof dailyPoints[i].metrics[key] === "number" ? (dailyPoints[i].metrics[key] as number) : 0;
+      const change = ((value - avg) / avg) * 100;
+      if (Math.abs(change) > ANOMALY_THRESHOLD_PERCENT) {
+        anomalies.push({
+          metricKey: key,
+          metricLabel: ACCOUNT_METRIC_LABELS[key],
+          date: dailyPoints[i].date,
+          value,
+          average: avg,
+          changePercent: change,
+        });
+      }
+    }
+  }
+  return anomalies;
+}
+
+export interface PeriodSummary {
+  range: PeriodRange;
+  metricDeltas: MetricDelta[];
+  topMedia: MediaEngagement[];
+  bottomMedia: MediaEngagement[];
+  weekdayPattern: TimePatternBucket[];
+  timeOfDayPattern: TimePatternBucket[];
+  anomalies: Anomaly[];
+}
+
+export function buildPeriodSummary(params: {
+  range: PeriodRange;
+  currentPoints: Array<{ date: string; metrics: Record<string, unknown> }>;
+  previousPoints: Array<{ metrics: Record<string, unknown> }>;
+  media: Array<{ id: string; caption: string | null; mediaProductType: string | null; postedAt: Date }>;
+  latestMetricsByMediaId: Map<string, Record<string, unknown>>;
+}): PeriodSummary {
+  const mediaInRange = params.media.filter(
+    (item) => item.postedAt >= params.range.from && item.postedAt <= params.range.to,
+  );
+  const engagements = buildMediaEngagements(mediaInRange, params.latestMetricsByMediaId);
+  const { top, bottom } = rankMedia(engagements);
+
+  return {
+    range: params.range,
+    metricDeltas: buildMetricDeltas(params.currentPoints, params.previousPoints),
+    topMedia: top,
+    bottomMedia: bottom,
+    weekdayPattern: buildWeekdayPattern(engagements),
+    timeOfDayPattern: buildTimeOfDayPattern(engagements),
+    anomalies: detectAnomalies(params.currentPoints),
+  };
+}

@@ -80,6 +80,7 @@ All application code lives in `app/src`.
 | `lib/instagramPoller.ts` | Pure normalization functions for the content poller: `normalizeMedia`, `normalizeComment`, `flattenInsights`, `buildMetricSnapshot`, `isActiveStory`, `normalizeFollowerCount`, `shouldFetchDemographics`, `buildDemographicsMetrics`, `dailyHistory` (groups snapshots into one-per-calendar-day, also the fallback for expired stories). Fully unit-tested against fixture Graph API payloads — no network or DB. |
 | `lib/instagramContentClient.ts` | The real Graph API calls (`graph.instagram.com/me/media`, `/{media-id}/comments`, `/me/insights`, `/{media-id}/insights`, `/me` for follower count, demographics breakdown insights). Not unit-tested, same boundary treatment as `instagramApiClient.ts`. |
 | `lib/analyticsDashboard.ts` | Pure read-side functions for the analytics dashboard: `buildAccountMetricCharts`/`buildMetricSeries` (per-metric Recharts series from `dailyHistory()` output), `buildMediaTableRows` (attaches latest metric snapshot to each media row), `parseAgeGenderBreakdown`/`parseGeographyBreakdown` (unpack Meta's nested `total_value.breakdowns[].results[]` demographics shape into chart-ready bars). Fully unit-tested against fixture payloads — no network or DB, mirrors the poller/client split (`instagramPoller.ts` = write-side, this = read-side). |
+| `lib/analyticsSummary.ts` | Pure functions for the period summary (data prep for the future AN4 AI analysis): `resolvePeriodRange` (preset or custom → current + equal-length previous range), `buildMetricDeltas` (flow metrics summed, the `followerCount` stock metric compared by last value), `rankMedia`/`buildWeekdayPattern`/`buildTimeOfDayPattern` (FEED/REELS only, ranked by `total_interactions`, time buckets gated at 3+ samples), `detectAnomalies` (day deviates >50% from the period average, gated at 4+ data points). Fully unit-tested, no DB access. |
 | `lib/prisma.ts` | Prisma client singleton, constructed with the `@prisma/adapter-pg` driver adapter. |
 | `components/*` | Client components for panel interactivity (forms, toggles, nav) — thin, calling server actions via `useTransition`. |
 
@@ -154,3 +155,12 @@ Prisma models (`app/prisma/schema.prisma`):
   rendering it; `AN2`'s parsers assumed the documented shape and were verified
   against the real `@chuck_uz` response after deploy — it matched, no fix
   needed.
+- **Format dates in a fixed timezone (UTC), never the ambient one.**
+  `MediaTable` (a client component, browser-rendered) and `SummaryPanel` (a
+  server component, container-rendered) both called `toLocaleDateString`
+  without a `timeZone` option and showed *different calendar dates for the
+  same publication* — one used the browser's local timezone, the other the
+  container's. Fixed by passing `timeZone: "UTC"` explicitly in both places,
+  matching `dailyHistory()`'s and the weekday/time-of-day bucketing's
+  existing UTC convention. Any new date-formatting call in this codebase
+  should do the same.

@@ -92,7 +92,7 @@ export function MediaTable({ rows }: { rows: MediaTableRow[] }) {
               </span>
             </div>
             <span className="text-muted-foreground">
-              {row.postedAt.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}
+              {row.postedAt.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", timeZone: "UTC" })}
             </span>
             <span>{row.likeCount}</span>
             <span>{row.commentsCount}</span>
