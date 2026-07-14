@@ -4,6 +4,7 @@ import { ArrowRightStartOnRectangleIcon } from "@heroicons/react/24/outline";
 import { auth, signOut } from "@/auth";
 import { PanelNav } from "@/components/PanelNav";
 import { PanelHeader } from "@/components/PanelHeader";
+import { prisma } from "@/lib/prisma";
 
 export default async function PanelLayout({
   children,
@@ -14,6 +15,10 @@ export default async function PanelLayout({
   if (!session?.user) {
     redirect("/login");
   }
+
+  const pendingCommentCount = await prisma.instagramComment.count({
+    where: { replyStatus: "draft_ready" },
+  });
 
   async function logout() {
     "use server";
@@ -28,7 +33,7 @@ export default async function PanelLayout({
         </div>
 
         <div className="flex-1">
-          <PanelNav isAdmin={session.user.role === "admin"} />
+          <PanelNav isAdmin={session.user.role === "admin"} pendingCommentCount={pendingCommentCount} />
         </div>
 
         <Link
@@ -68,7 +73,11 @@ export default async function PanelLayout({
           aria-label="Разделы панели (мобильная версия)"
           className="overflow-x-auto border-b border-border bg-card px-3 py-2 md:hidden"
         >
-          <PanelNav direction="horizontal" isAdmin={session.user.role === "admin"} />
+          <PanelNav
+            direction="horizontal"
+            isAdmin={session.user.role === "admin"}
+            pendingCommentCount={pendingCommentCount}
+          />
         </nav>
 
         <PanelHeader />

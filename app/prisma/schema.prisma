@@ -76,6 +76,11 @@ model InstagramComment {
   postedAt            DateTime
   createdAt           DateTime @default(now())
 
+  replyStatus         String   @default("pending")
+  draftReply          String?
+  repliedAt           DateTime?
+  sentReplyId         String?
+
   @@map("instagram_comments")
 }
 
@@ -118,10 +123,12 @@ model ClaudeApiKeyConfig {
 }
 
 model AgentConfig {
-  id           String   @id @default(cuid())
-  singleton    String   @unique @default("agent")
-  toneAndRules String   @default("")
-  updatedAt    DateTime @updatedAt
+  id                        String   @id @default(cuid())
+  singleton                 String   @unique @default("agent")
+  toneAndRules              String   @default("")
+  commentToneAndRules       String   @default("")
+  commentModerationEnabled  Boolean  @default(true)
+  updatedAt                 DateTime @updatedAt
 
   @@map("agent_config")
 }

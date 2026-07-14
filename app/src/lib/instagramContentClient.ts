@@ -88,4 +88,25 @@ export const instagramContentClient = {
     url.searchParams.set("access_token", accessToken);
     return fetchJson(url);
   },
+
+  async postCommentReply({
+    accessToken,
+    commentId,
+    message,
+  }: {
+    accessToken: string;
+    commentId: string;
+    message: string;
+  }) {
+    const url = new URL(`${GRAPH_BASE}/${commentId}/replies`);
+    url.searchParams.set("message", message);
+    url.searchParams.set("access_token", accessToken);
+    const res = await fetch(url, { method: "POST" });
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => "");
+      const detail = bodyText.trim().startsWith("<") ? "upstream returned an error page, not JSON" : bodyText.slice(0, 500);
+      throw new Error(`Instagram content API request failed: ${res.status} ${url.pathname} ${detail}`);
+    }
+    return res.json();
+  },
 };

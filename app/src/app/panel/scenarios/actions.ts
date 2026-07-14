@@ -34,6 +34,28 @@ export async function saveAgentConfigAction(toneAndRules: string) {
   revalidatePath("/panel/scenarios");
 }
 
+export async function saveCommentConfigAction(params: {
+  commentToneAndRules: string;
+  commentModerationEnabled: boolean;
+}) {
+  await requireAdmin();
+
+  await prisma.agentConfig.upsert({
+    where: { singleton: "agent" },
+    create: {
+      singleton: "agent",
+      commentToneAndRules: params.commentToneAndRules,
+      commentModerationEnabled: params.commentModerationEnabled,
+    },
+    update: {
+      commentToneAndRules: params.commentToneAndRules,
+      commentModerationEnabled: params.commentModerationEnabled,
+    },
+  });
+
+  revalidatePath("/panel/scenarios");
+}
+
 export async function addKnowledgeDocumentAction(params: { title: string; body: string }) {
   await requireAdmin();
 
