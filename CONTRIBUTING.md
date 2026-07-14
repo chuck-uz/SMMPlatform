@@ -91,19 +91,20 @@ real browser against the running dev container.
 Production runs on [DockHost](https://dockhost.ru), container `smm`, repository
 tracking the `main` branch.
 
+**Pushing to `main` is enough.** DockHost auto-rebuilds and redeploys `smm` on
+every push — do not run `dockhost repository build` manually, it's redundant.
+After pushing, wait a minute or two and check:
+
 ```sh
-dockhost repository build --name smm                 # rebuild the image from latest main
-dockhost container update --name smm --image <new-image-tag>   # ⚠ see below
+dockhost container list                # image tag should match the new commit hash
+dockhost container logs smm            # confirm migrations ran and the app started cleanly
 ```
 
-**⚠ `dockhost container update --image ...` replaces the container's full spec**
-if `--variable`/`--port` are omitted — it does not patch just the image. Either:
-
-- pass the complete `--variable NAME:value` list and `--port 3000/TCP` in the
-  same call, or
-- prefer the DockHost dashboard's container-edit screen for anything touching
-  variables/ports, and only use the CLI for straightforward image-tag bumps
-  once you've confirmed the full variable set is intact.
+Only reach for `dockhost container update --image ...` for something DockHost's
+auto-build doesn't cover. **⚠ It replaces the container's full spec** if
+`--variable`/`--port` are omitted — it does not patch just the image. Either
+pass the complete `--variable NAME:value` list and `--port 3000/TCP` in the
+same call, or prefer the DockHost dashboard's container-edit screen instead.
 
 Required env vars for `smm` in production: `DATABASE_URL`, `NEXTAUTH_URL`,
 `NEXTAUTH_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ENCRYPTION_KEY`,
