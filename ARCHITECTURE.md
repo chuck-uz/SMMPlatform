@@ -80,9 +80,9 @@ All application code lives in `app/src`.
 | `lib/instagramPoller.ts` | Pure normalization functions for the content poller: `normalizeMedia`, `normalizeComment`, `flattenInsights`, `buildMetricSnapshot`, `isActiveStory`, `normalizeFollowerCount`, `shouldFetchDemographics`, `buildDemographicsMetrics`, `dailyHistory` (groups snapshots into one-per-calendar-day, also the fallback for expired stories). Fully unit-tested against fixture Graph API payloads — no network or DB. |
 | `lib/instagramContentClient.ts` | The real Graph API calls (`graph.instagram.com/me/media`, `/{media-id}/comments`, `/me/insights`, `/{media-id}/insights`, `/me` for follower count, demographics breakdown insights). Not unit-tested, same boundary treatment as `instagramApiClient.ts`. |
 | `lib/analyticsDashboard.ts` | Pure read-side functions for the analytics dashboard: `buildAccountMetricCharts`/`buildMetricSeries` (per-metric Recharts series from `dailyHistory()` output), `buildMediaTableRows` (attaches latest metric snapshot to each media row), `parseAgeGenderBreakdown`/`parseGeographyBreakdown` (unpack Meta's nested `total_value.breakdowns[].results[]` demographics shape into chart-ready bars). Fully unit-tested against fixture payloads — no network or DB, mirrors the poller/client split (`instagramPoller.ts` = write-side, this = read-side). |
-| `lib/analyticsSummary.ts` | Pure functions for the period summary (data prep for the AN4 AI analysis): `resolvePeriodRange` (preset or custom → current + equal-length previous range), `buildMetricDeltas` (flow metrics summed, the `followerCount` stock metric compared by last value), `rankMedia`/`buildWeekdayPattern`/`buildTimeOfDayPattern` (FEED/REELS only, ranked by `total_interactions`, time buckets gated at 3+ samples), `detectAnomalies` (day deviates >50% from the period average, gated at 4+ data points). Fully unit-tested, no DB access. |
-| `lib/analysisReport.ts` | Pure functions for the AI analysis feature (AN4): `serializeSummaryForPrompt`/`buildAnalysisPrompt` (turn a `PeriodSummary` into the prompt sent to Claude), `shouldSkipManualAnalysis` (5-minute cooldown per account+period), `isDigestDue` (7-day gate for the weekly digest), `parseAnalysisContent` (defensive validation of Claude's structured response). Fully unit-tested. |
-| `lib/claudeAnalysisClient.ts` | The real call to `claude-sonnet-5` (`POST /v1/messages` via `fetch`, matching `claudeApiClient.ts`'s boundary treatment) with `output_config.format` (JSON Schema: `summary`/`observations`/`recommendations`) and an anti-hallucination system prompt. Not unit-tested. |
+| `lib/analyticsSummary.ts` | Pure media-engagement/pattern utilities, shared by the unified AI-разбор: `buildMediaEngagements`/`rankMedia` (FEED/REELS only, top/bottom-3 by `total_interactions`), `buildWeekdayPattern`/`buildTimeOfDayPattern` (gated at 3+ samples per bucket), `detectAnomalies` (day deviates >50% from the window average, gated at 4+ data points). No longer owns period selection or metric deltas — that moved to `accountInsights.ts`. Fully unit-tested, no DB access. |
+| `lib/accountInsights.ts` | Pure functions for the unified AI-разбор (supersedes AN3/AN4/GROW1's separate `analysisReport.ts`/`growthInsights.ts`): `buildMediaFormatEngagements`/`buildFormatBreakdown` (engagement per media format, gated at 3+ samples), `buildMetricTrends` (first-half-vs-second-half split of a fixed 90-day window, generalized to **every** account metric — stock `followerCount` compared by last value per half, flow metrics by average per half — not just reach), `buildDemandSignal` (leads grouped by destination, `available: false` when empty), `buildInsightsPrompt`/`parseInsightsContent` (5-field schema: `summary`/`observations`/`gaps`/`direction`/`recommendations`), `shouldSkipManualInsights` (5-minute cooldown), `isInsightsDigestDue` (7-day gate). Fully unit-tested. |
+| `lib/claudeInsightsClient.ts` | The real call to `claude-sonnet-5` with `output_config.format` (the 5-field schema above) and a system prompt that forbids both fabrication and quoting raw JSON field names (`current`/`formatBreakdown`/`sufficientData`/etc.) in the output text. Not unit-tested, same boundary treatment as `claudeApiClient.ts`. |
 | `lib/agentPrompt.ts` | Pure functions for the AI agent core (AG1): `buildSystemPrompt` (assembles tone/rules + knowledge base documents + example dialogues into one system prompt; the no-prices/no-closing-deals rule is always baked in, not admin-editable), `buildConversationMessages` (dialogue turns → Claude's `user`/`assistant` message array). Fully unit-tested. |
 | `lib/agentSandbox.ts` | Pure function `canSaveAsExample` (AG1): blocks saving a sandbox dialogue as a reusable example if any agent turn in it was rated 👎. Fully unit-tested. |
 | `lib/agentClient.ts` | `respondAndExtractLead` (AG1+LEAD1): one structured `POST /v1/messages` call to `claude-haiku-4-5-20251001` (`output_config.format`) that returns both the reply text and the current full snapshot of lead fields in one round trip, replacing an earlier plain-text-only version. Not unit-tested, same boundary treatment as `claudeAnalysisClient.ts`. |
@@ -91,8 +91,6 @@ All application code lives in `app/src`.
 | `lib/leadNotify.ts` | Pure function `buildLeadNotificationText` (LEAD2): formats a `Lead` into the Telegram message text. Fully unit-tested. |
 | `lib/telegramBot.ts` | Pure, dependency-injected `connectTelegramBot` (LEAD2): verifies a bot token via an injected client, then encrypts it — mirrors `claudeApiKey.ts`. Fully unit-tested. |
 | `lib/telegramClient.ts` | The real Telegram Bot API calls (LEAD2): `verifyToken` (`getMe`) and `sendTelegramMessage` (`sendMessage`). Not unit-tested, same boundary treatment as `claudeApiClient.ts`. |
-| `lib/growthInsights.ts` | Pure functions for the growth-insight report (GROW1): `buildMediaFormatEngagements`/`buildFormatBreakdown` (engagement rolled up per media format — Reels/carousel/photo/video — gated at 3+ samples per format), `buildReachTrend` (first-half vs second-half split of a 90-day window, gated at 6+ daily points), `buildDemandSignal` (leads grouped by destination; `available: false` when there are no leads yet), `buildGrowthPrompt`/`parseGrowthContent` (prompt assembly and defensive response validation), `shouldSkipManualGrowthAnalysis` (5-minute cooldown), `isGrowthDigestDue` (30-day gate). Fully unit-tested, independent of `analysisReport.ts`. |
-| `lib/claudeGrowthClient.ts` | The real call to `claude-sonnet-5` (GROW1) with `output_config.format` (JSON Schema: `bottlenecks`/`direction`/`growthPriorities`) and a system prompt that explicitly requires saying so when an input section is insufficient rather than inventing one. Not unit-tested, same boundary treatment as `claudeAnalysisClient.ts`. |
 | `lib/prisma.ts` | Prisma client singleton, constructed with the `@prisma/adapter-pg` driver adapter. |
 | `components/*` | Client components for panel interactivity (forms, toggles, nav) — thin, calling server actions via `useTransition`. |
 
@@ -120,10 +118,6 @@ Prisma models (`app/prisma/schema.prisma`):
   snapshots only exist once the account has 100+ followers (Meta's own
   threshold); follower growth is derived from day-over-day `followerCount`
   deltas in `account`-scope snapshots, not a separate metric.
-- **`AiAnalysisReport`** — append-only, one row per AI analysis run
-  (`trigger`: `manual`/`weekly`, `content` JSON: `summary`/`observations`/
-  `recommendations`, `periodFrom`/`periodTo`). Never overwritten — past
-  reports stay visible in the panel.
 - **`AgentConfig`** — a singleton row (`singleton: "agent"`) holding the AI
   agent's tone and rules as free text. One shared config, not per-channel —
   channel-specific overlays are deferred to the tasks that actually wire up
@@ -155,11 +149,12 @@ Prisma models (`app/prisma/schema.prisma`):
   same shape as `ClaudeApiKeyConfig`.
 - **`TelegramNotificationRecipient`** — a manually-entered whitelist of
   `chatId`s (+ optional `label`) that get a message on every new `Lead`.
-- **`GrowthInsightReport`** — append-only, one row per growth-insight run
-  (`trigger`: `manual`/`digest`, `content` JSON: `bottlenecks`/`direction`/
-  `growthPriorities`, `periodFrom`/`periodTo`, always a 90-day window).
-  Structurally identical to `AiAnalysisReport` but a separate table/entity —
-  the two reports are independently triggered and don't share a schema.
+- **`AccountInsightReport`** — append-only, one row per AI-разбор run
+  (`trigger`: `manual`/`digest`, `content` JSON: `summary`/`observations`/
+  `gaps`/`direction`/`recommendations`, `periodFrom`/`periodTo`, always a
+  fixed 90-day window). Replaces the earlier separate `AiAnalysisReport`
+  (AN4) and `GrowthInsightReport` (GROW1) tables, dropped in the same
+  migration that added this one — see Key Decisions below.
 
 ## 5. Key decisions
 
@@ -216,14 +211,14 @@ Prisma models (`app/prisma/schema.prisma`):
   matching `dailyHistory()`'s and the weekday/time-of-day bucketing's
   existing UTC convention. Any new date-formatting call in this codebase
   should do the same.
-- **Structured output over free-form text for the AI analysis (AN4).**
-  `claudeAnalysisClient.ts` uses `output_config.format` (JSON Schema) instead
+- **Structured output over free-form text for the AI-разбор.**
+  `claudeInsightsClient.ts` uses `output_config.format` (JSON Schema) instead
   of asking Claude for markdown and parsing it — guarantees a shape that maps
-  directly onto `AiAnalysisReport.content`, with `parseAnalysisContent()` as
-  a defensive fallback in case a response still doesn't validate.
-- **No day/time pinning for the weekly digest.** Rather than a cron-like
+  directly onto `AccountInsightReport.content`, with `parseInsightsContent()`
+  as a defensive fallback in case a response still doesn't validate.
+- **No day/time pinning for the digest.** Rather than a cron-like
   "every Monday 9am", the digest interval in `instrumentation.ts` just checks
-  every 6 hours whether the last `weekly` report for an account is 7+ days
+  every 6 hours whether the last `digest` report for an account is 7+ days
   old — same "no extra scheduler" reasoning as the other pollers, and avoids
   timezone/DST edge cases for a single weekly email-equivalent.
 - **The AI agent (AG1) replies with a single plain `messages.create` call,
@@ -277,34 +272,41 @@ Prisma models (`app/prisma/schema.prisma`):
   Telegram Bot API constraint, not a bug. The "Отправить тестовое сообщение"
   button in `/panel/connections` exists specifically because there's no
   live channel yet to prove end-to-end delivery any other way.
-- **The growth-insight report (GROW1) is a fully independent entity, not an
-  extension of `AiAnalysisReport` (AN4).** Both follow the same
-  summary/pure-functions/Claude-call/append-only-table shape, but live as
-  separate models, prompts, and triggers — a deliberate revision made
-  mid-grilling after initially planning to bolt new fields onto AN4's
-  existing schema. Keeps the two reports free to evolve (or fail) on their
-  own without coupling their JSON shapes.
-- **GROW1 always analyzes a fixed 90-day window, independent of whatever
-  period the AN3/AN4 summary above it has selected.** Bottleneck/direction/
-  priority signals need a longer, stable baseline than a 7-day filter can
-  give; tying the window to the UI's period selector would make the report
-  flicker with whatever the user last clicked.
-- **Reach trend uses a first-half-vs-second-half split within the 90-day
-  window, not a comparison against the prior 90-day period.** The account
-  (`@chuck_uz`) is only a few weeks old — a prior-period comparison would
-  stay empty for months. Splitting the current window in two produces a
-  usable trend signal much sooner, at the cost of a shorter effective
-  baseline per half.
+- **AN3 (period-selector summary), AN4 (AI analysis), and GROW1 (growth
+  insights) were later unified into a single AI-разбор** on explicit user
+  request, after having shipped as three separate mechanisms (GROW1 even
+  went through an initial independent-entity design before this). One
+  Claude call, one `AccountInsightReport`, one prompt (`accountInsights.ts`
+  + `claudeInsightsClient.ts`); the earlier `analysisReport.ts`/
+  `claudeAnalysisClient.ts`/`growthInsights.ts`/`claudeGrowthClient.ts` and
+  their tables were deleted in the same change (see
+  `SMM Platform/decisions/analytics-insights-unification.md` in the vault).
+- **The unified AI-разбор always analyzes a fixed 90-day window, with no
+  manual period selector.** Comparing to a separate "previous period" (the
+  original AN3/AN4 approach) is nearly always empty for an account this
+  young; a first-half-vs-second-half split of one 90-day window (the
+  approach GROW1 originally used only for reach) produces a usable trend
+  signal much sooner, and was generalized in `buildMetricTrends` to every
+  account metric, not just reach.
+- **Raw computed numbers (metric trends, top/bottom posts, patterns,
+  anomalies, format breakdown, demand signal) render automatically on the
+  AI-разбор tab — no button required.** Only the actual Claude call needs
+  an explicit trigger (it costs real tokens); the data underneath it is
+  free to compute on every page load. This also incidentally fixed a real
+  bug: the old manual period-selector form silently failed to submit when
+  "Свой диапазон" was picked with empty (but `required`) date fields —
+  removing the manual period step eliminated the failure mode entirely
+  rather than patching it.
 - **`buildDemandSignal` degrades to an explicit "no data yet" flag
   (`available: false`) instead of a partial/empty computation.** There is no
   live lead-generating channel yet (`CM1`/`DM1`/`WEB5` are all `todo`), and
   the sandbox deliberately never creates real `Lead` rows (see LEAD1), so
   `leads` is empty in production today. The system prompt tells Claude to
   say so plainly rather than reason about an empty destination list as if
-  it meant "no demand." Verified on prod: the first real run correctly
-  reported all three input sections (`formatBreakdown`, `reachTrend`,
-  `demandSignal`) as insufficient, without inventing numbers.
-- **GROW1 has its own trigger and cadence (5-minute manual cooldown, 30-day
-  digest), separate from AN4's weekly one.** A 90-day-window strategic
-  report doesn't move week to week the way a metrics summary does; a
-  monthly cadence matches how often its conclusions can plausibly change.
+  it meant "no demand."
+- **The system prompt explicitly forbids quoting raw JSON field names**
+  (`current`/`previous`/`formatBreakdown`/`sufficientData`/`demandSignal.
+  available`/etc.) **in the output text.** AN4 and GROW1 each hit this bug
+  independently in production before the fix was folded into the single
+  remaining prompt — telling Claude to ground its answer in the input JSON
+  isn't enough; it will parrot the field names back unless told not to.
