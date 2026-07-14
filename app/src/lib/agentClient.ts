@@ -41,7 +41,7 @@ export async function respondAndExtractLead(
     },
     body: JSON.stringify({
       model,
-      max_tokens: 1024,
+      max_tokens: 2048,
       system: systemPrompt,
       messages,
       output_config: { format: { type: "json_schema", schema: REPLY_OUTPUT_SCHEMA } },
@@ -56,6 +56,9 @@ export async function respondAndExtractLead(
   }
 
   const data = await response.json();
+  if (data.stop_reason !== "end_turn") {
+    console.log(`[agentClient] non-standard stop_reason: ${data.stop_reason}, model: ${model}`);
+  }
   const textBlock = (data.content as Array<{ type: string; text?: string }> | undefined)?.find(
     (block) => block.type === "text",
   );
