@@ -19,19 +19,22 @@ export function TelegramRecipientsList({ recipients }: { recipients: TelegramRec
   const [label, setLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [testErrors, setTestErrors] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
 
   function handleSendTest() {
     setError(null);
     setTestResult(null);
+    setTestErrors([]);
     startTransition(async () => {
       try {
-        const { sent, failed } = await sendTestTelegramMessageAction();
+        const { sent, failed, errors } = await sendTestTelegramMessageAction();
         setTestResult(
           failed === 0
             ? `Отправлено ${sent} из ${sent}`
             : `Отправлено ${sent} из ${sent + failed}, ${failed} не удалось`,
         );
+        setTestErrors(errors);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Не удалось отправить тестовое сообщение");
       }
@@ -99,6 +102,13 @@ export function TelegramRecipientsList({ recipients }: { recipients: TelegramRec
             </button>
             {testResult ? <span className="text-xs text-accent">{testResult}</span> : null}
           </div>
+          {testErrors.length > 0 ? (
+            <ul className="list-disc space-y-0.5 pl-5 text-xs text-destructive">
+              {testErrors.map((message) => (
+                <li key={message}>{message}</li>
+              ))}
+            </ul>
+          ) : null}
         </>
       )}
 
