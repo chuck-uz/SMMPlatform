@@ -63,6 +63,7 @@ model InstagramMedia {
   comments          InstagramComment[]
   metricSnapshots   InstagramMetricSnapshot[]
 
+  @@index([accountId])
   @@map("instagram_media")
 }
 
@@ -81,6 +82,8 @@ model InstagramComment {
   repliedAt           DateTime?
   sentReplyId         String?
 
+  @@index([mediaId])
+  @@index([replyStatus])
   @@map("instagram_comments")
 }
 
@@ -94,6 +97,8 @@ model InstagramMetricSnapshot {
   metrics     Json
   capturedAt  DateTime @default(now())
 
+  @@index([accountId, scope, capturedAt])
+  @@index([mediaId])
   @@map("instagram_metric_snapshots")
 }
 
@@ -107,6 +112,7 @@ model AccountInsightReport {
   content     Json
   createdAt   DateTime @default(now())
 
+  @@index([accountId, trigger, createdAt])
   @@map("account_insight_reports")
 }
 
@@ -178,6 +184,8 @@ model Lead {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  @@index([createdAt])
+  @@index([status])
   @@map("leads")
 }
 
