@@ -10,6 +10,21 @@ interface RawComment {
   timestamp: string;
 }
 
+interface RawMedia {
+  id: string;
+  caption?: string;
+  media_type: string;
+  media_product_type?: string;
+  permalink?: string;
+  timestamp: string;
+  like_count?: number;
+  comments_count?: number;
+}
+
+// Follow paging.next up to this many pages. Bounds an otherwise-unbounded loop on
+// pathological data; hitting the cap is logged so truncation is never silent.
+const MAX_PAGES = 50;
+
 const ACCOUNT_METRICS = "reach,profile_views,accounts_engaged,total_interactions,website_clicks";
 const MEDIA_METRICS: Record<string, string> = {
   FEED: "reach,likes,comments,saved,shares,total_interactions",
@@ -31,8 +46,25 @@ export const instagramContentClient = {
     const url = new URL(`${GRAPH_BASE}/me/media`);
     url.searchParams.set("fields", MEDIA_FIELDS);
     url.searchParams.set("access_token", accessToken);
-    const data = await fetchJson(url);
-    return data.data ?? [];
+
+    // /me/media returns only the newest ~25 posts per page; without following
+    // pagination, older posts are never ingested (missing from analytics and
+    // never polled for comments).
+    const media: RawMedia[] = [];
+    let nextUrl: URL | null = url;
+    let pageCount = 0;
+
+    while (nextUrl && pageCount < MAX_PAGES) {
+      const data = await fetchJson(nextUrl);
+      media.push(...(data.data ?? []));
+      nextUrl = data.paging?.next ? new URL(data.paging.next) : null;
+      pageCount += 1;
+    }
+    if (nextUrl) {
+      console.warn(`[instagram-content] listMedia hit the ${MAX_PAGES}-page cap; some older media were not ingested`);
+    }
+
+    return media;
   },
 
   async listComments({ accessToken, mediaId }: { accessToken: string; mediaId: string }) {
@@ -46,13 +78,15 @@ export const instagramContentClient = {
     const comments: RawComment[] = [];
     let nextUrl: URL | null = url;
     let pageCount = 0;
-    const MAX_PAGES = 20;
 
     while (nextUrl && pageCount < MAX_PAGES) {
       const data = await fetchJson(nextUrl);
       comments.push(...(data.data ?? []));
       nextUrl = data.paging?.next ? new URL(data.paging.next) : null;
       pageCount += 1;
+    }
+    if (nextUrl) {
+      console.warn(`[instagram-content] listComments for ${mediaId} hit the ${MAX_PAGES}-page cap; some comments were not fetched`);
     }
 
     return comments;
