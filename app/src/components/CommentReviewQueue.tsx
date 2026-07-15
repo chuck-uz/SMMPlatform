@@ -21,10 +21,14 @@ function CommentDraftCard({ comment }: { comment: CommentItem }) {
     setError(null);
     startTransition(async () => {
       try {
-        await approveCommentReplyAction({ commentId: comment.id, message });
+        const result = await approveCommentReplyAction({ commentId: comment.id, message });
+        if ("error" in result) {
+          setError(result.error);
+          return;
+        }
         setStatus("sent");
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Не удалось отправить ответ");
+      } catch {
+        setError("Не удалось отправить ответ");
       }
     });
   }
@@ -34,10 +38,14 @@ function CommentDraftCard({ comment }: { comment: CommentItem }) {
     startTransition(async () => {
       try {
         const result = await regenerateCommentReplyAction(comment.id);
+        if ("error" in result) {
+          setError(result.error);
+          return;
+        }
         setMessage(result.draftReply);
         setStatus("draft_ready");
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Не удалось сгенерировать ответ заново");
+      } catch {
+        setError("Не удалось сгенерировать ответ заново");
       }
     });
   }
