@@ -9,6 +9,11 @@ import { generateCommentReply } from "@/lib/commentReplyClient";
 import { instagramContentClient } from "@/lib/instagramContentClient";
 import { createRateLimiter } from "@/lib/rateLimiter";
 
+// These actions return { error } instead of throwing user-facing messages:
+// Next.js redacts thrown Server Action error messages to a generic digest in
+// production, so a returned value is the only way the operator sees the reason.
+export type ActionError = { error: string };
+
 // Throttle the paid regenerate action per user so nobody can spam it into
 // unbounded Claude spend.
 const regenerateLimiter = createRateLimiter({ limit: 20, windowMs: 60_000 });
@@ -21,24 +26,18 @@ async function requireSession() {
   return session;
 }
 
-async function requireClaudeApiKey(encryptionKey: string) {
-  const claudeConfig = await prisma.claudeApiKeyConfig.findUnique({ where: { singleton: "claude" } });
-  if (!claudeConfig?.verified) {
-    throw new Error("Ключ Claude не настроен или не проверен — подключите его на странице «Подключения»");
-  }
-  return decrypt(claudeConfig.encryptedApiKey, encryptionKey);
-}
-
-export async function approveCommentReplyAction(params: { commentId: string; message: string }) {
+export async function approveCommentReplyAction(
+  params: { commentId: string; message: string },
+): Promise<{ ok: true } | ActionError> {
   await requireSession();
 
   if (!params.message.trim()) {
-    throw new Error("Текст ответа не может быть пустым");
+    return { error: "Текст ответа не может быть пустым" };
   }
 
   const encryptionKey = process.env.ENCRYPTION_KEY;
   if (!encryptionKey) {
-    throw new Error("ENCRYPTION_KEY не настроен на сервере");
+    return { error: "Сервер не настроен (ENCRYPTION_KEY). Обратитесь к администратору." };
   }
 
   // Atomically claim the draft before posting so a double-click, a second open
@@ -50,7 +49,7 @@ export async function approveCommentReplyAction(params: { commentId: string; mes
     data: { replyStatus: "sending" },
   });
   if (claim.count === 0) {
-    throw new Error("Этот комментарий уже отправлен или обрабатывается");
+    return { error: "Этот комментарий уже отправлен или обрабатывается" };
   }
 
   try {
@@ -81,24 +80,33 @@ export async function approveCommentReplyAction(params: { commentId: string; mes
       where: { id: params.commentId },
       data: { replyStatus: "failed" },
     });
-    throw error;
+    console.error(`[inbox] approve failed for comment ${params.commentId}`, error);
+    return { error: "Не удалось отправить ответ в Instagram — попробуйте ещё раз" };
   }
 
   revalidatePath("/panel/inbox");
+  return { ok: true };
 }
 
-export async function regenerateCommentReplyAction(commentId: string) {
+export async function regenerateCommentReplyAction(
+  commentId: string,
+): Promise<{ draftReply: string } | ActionError> {
   const session = await requireSession();
 
   if (!regenerateLimiter.check(session.user!.id ?? "unknown").allowed) {
-    throw new Error("Слишком много перегенераций подряд — подождите минуту");
+    return { error: "Слишком много перегенераций подряд — подождите минуту" };
   }
 
   const encryptionKey = process.env.ENCRYPTION_KEY;
   if (!encryptionKey) {
-    throw new Error("ENCRYPTION_KEY не настроен на сервере");
+    return { error: "Сервер не настроен (ENCRYPTION_KEY). Обратитесь к администратору." };
   }
-  const apiKey = await requireClaudeApiKey(encryptionKey);
+
+  const claudeConfig = await prisma.claudeApiKeyConfig.findUnique({ where: { singleton: "claude" } });
+  if (!claudeConfig?.verified) {
+    return { error: "Ключ Claude не настроен или не проверен — подключите его на странице «Подключения»" };
+  }
+  const apiKey = decrypt(claudeConfig.encryptedApiKey, encryptionKey);
 
   const [comment, agentConfig, knowledgeDocuments] = await Promise.all([
     prisma.instagramComment.findUniqueOrThrow({ where: { id: commentId } }),
@@ -108,7 +116,7 @@ export async function regenerateCommentReplyAction(commentId: string) {
 
   // Never resurrect an already-sent comment back into the pending queue.
   if (comment.replyStatus === "sent" || comment.replyStatus === "sending") {
-    throw new Error("Этот комментарий уже отправлен или обрабатывается");
+    return { error: "Этот комментарий уже отправлен или обрабатывается" };
   }
 
   const systemPrompt = buildCommentReplySystemPrompt({
@@ -116,7 +124,14 @@ export async function regenerateCommentReplyAction(commentId: string) {
     knowledgeDocuments,
   });
   const userMessage = buildCommentUserMessage({ text: comment.text, username: comment.username });
-  const { reply } = await generateCommentReply(apiKey, systemPrompt, userMessage);
+
+  let reply: string;
+  try {
+    ({ reply } = await generateCommentReply(apiKey, systemPrompt, userMessage));
+  } catch (error) {
+    console.error(`[inbox] regenerate failed for comment ${commentId}`, error);
+    return { error: "Не удалось сгенерировать ответ заново — попробуйте ещё раз" };
+  }
 
   await prisma.instagramComment.update({
     where: { id: comment.id },
