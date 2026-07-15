@@ -121,65 +121,83 @@ export async function register() {
         const accessToken = decrypt(account.accessToken, encryptionKey);
 
         for (const media of account.media) {
-          const rawComments = await instagramContentClient.listComments({
-            accessToken,
-            mediaId: media.instagramMediaId,
-          });
-          console.log(`[instagram-comments-poll] media ${media.instagramMediaId}: fetched ${rawComments.length} comments`);
+          // Isolate each media: one deleted/broken post must not abort polling of
+          // the account's remaining posts (its listComments would throw every tick).
+          try {
+            const rawComments = await instagramContentClient.listComments({
+              accessToken,
+              mediaId: media.instagramMediaId,
+            });
 
-          for (const raw of rawComments) {
-            const comment = normalizeComment(raw, media.id);
+            for (const raw of rawComments) {
+              const comment = normalizeComment(raw, media.id);
 
-            let created;
-            try {
-              created = await prisma.instagramComment.create({ data: comment });
-            } catch (error) {
-              // P2002 unique constraint — comment already seen on a previous poll, nothing to do.
-              if (error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "P2002") {
+              let created;
+              try {
+                created = await prisma.instagramComment.create({ data: comment });
+              } catch (error) {
+                // P2002 unique constraint — comment already seen on a previous poll, nothing to do.
+                if (error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "P2002") {
+                  continue;
+                }
+                throw error;
+              }
+
+              // Ingestion baseline: never draft/reply to the historical backlog that
+              // predates connecting the account, and never reply to the account's own
+              // comments. Such rows are recorded but parked as "skipped".
+              const isBacklog = created.postedAt < account.createdAt;
+              const isSelfComment = created.username != null && created.username === account.username;
+              if (isBacklog || isSelfComment) {
+                await prisma.instagramComment.update({
+                  where: { id: created.id },
+                  data: { replyStatus: "skipped" },
+                });
                 continue;
               }
-              throw error;
-            }
 
-            if (!canAutoReply || !claudeConfig || !agentConfig) continue;
+              if (!canAutoReply || !claudeConfig || !agentConfig) continue;
 
-            try {
-              const apiKey = decrypt(claudeConfig.encryptedApiKey, encryptionKey);
-              const systemPrompt = buildCommentReplySystemPrompt({
-                commentToneAndRules: agentConfig.commentToneAndRules,
-                knowledgeDocuments,
-              });
-              const userMessage = buildCommentUserMessage({ text: created.text, username: created.username });
-              const { reply } = await generateCommentReply(apiKey, systemPrompt, userMessage);
+              try {
+                const apiKey = decrypt(claudeConfig.encryptedApiKey, encryptionKey);
+                const systemPrompt = buildCommentReplySystemPrompt({
+                  commentToneAndRules: agentConfig.commentToneAndRules,
+                  knowledgeDocuments,
+                });
+                const userMessage = buildCommentUserMessage({ text: created.text, username: created.username });
+                const { reply } = await generateCommentReply(apiKey, systemPrompt, userMessage);
 
-              if (agentConfig.commentModerationEnabled) {
+                if (agentConfig.commentModerationEnabled) {
+                  await prisma.instagramComment.update({
+                    where: { id: created.id },
+                    data: { draftReply: reply, replyStatus: "draft_ready" },
+                  });
+                } else {
+                  const posted = await instagramContentClient.postCommentReply({
+                    accessToken,
+                    commentId: created.instagramCommentId,
+                    message: reply,
+                  });
+                  await prisma.instagramComment.update({
+                    where: { id: created.id },
+                    data: {
+                      draftReply: reply,
+                      replyStatus: "sent",
+                      repliedAt: new Date(),
+                      sentReplyId: typeof posted?.id === "string" ? posted.id : null,
+                    },
+                  });
+                }
+              } catch (error) {
+                console.error(`[instagram-comments-poll] reply failed for comment ${created.id}`, error);
                 await prisma.instagramComment.update({
                   where: { id: created.id },
-                  data: { draftReply: reply, replyStatus: "draft_ready" },
-                });
-              } else {
-                const posted = await instagramContentClient.postCommentReply({
-                  accessToken,
-                  commentId: created.instagramCommentId,
-                  message: reply,
-                });
-                await prisma.instagramComment.update({
-                  where: { id: created.id },
-                  data: {
-                    draftReply: reply,
-                    replyStatus: "sent",
-                    repliedAt: new Date(),
-                    sentReplyId: typeof posted?.id === "string" ? posted.id : null,
-                  },
+                  data: { replyStatus: "failed" },
                 });
               }
-            } catch (error) {
-              console.error(`[instagram-comments-poll] reply failed for comment ${created.id}`, error);
-              await prisma.instagramComment.update({
-                where: { id: created.id },
-                data: { replyStatus: "failed" },
-              });
             }
+          } catch (error) {
+            console.error(`[instagram-comments-poll] failed for media ${media.instagramMediaId}`, error);
           }
         }
       } catch (error) {
@@ -227,6 +245,9 @@ export async function register() {
         for (const media of account.media) {
           if (media.mediaProductType === "STORY") continue;
 
+          // Isolate each media: a deleted post throws on getMediaInsights every tick;
+          // that must not abort metric snapshots for the account's other media.
+          try {
           const mediaInsights = await instagramContentClient.getMediaInsights({
             accessToken,
             mediaId: media.instagramMediaId,
@@ -241,6 +262,9 @@ export async function register() {
               now,
             }) as Prisma.InstagramMetricSnapshotUncheckedCreateInput,
           });
+          } catch (error) {
+            console.error(`[instagram-metrics-poll] failed for media ${media.instagramMediaId}`, error);
+          }
         }
       } catch (error) {
         console.error(`[instagram-metrics-poll] failed for account ${account.id}`, error);
@@ -378,21 +402,26 @@ export async function register() {
     }
   }
 
-  setInterval(refreshExpiringTokens, TOKEN_CHECK_INTERVAL_MS);
-  void refreshExpiringTokens();
+  // Prevent overlapping runs: a poller whose run outlasts its interval must not
+  // start a second concurrent run (which would double Instagram API traffic and
+  // pile up unbounded). A run is skipped while its previous one is still in flight.
+  function scheduleGuarded(fn: () => Promise<void>, intervalMs: number) {
+    let running = false;
+    const run = () => {
+      if (running) return;
+      running = true;
+      void fn().finally(() => {
+        running = false;
+      });
+    };
+    setInterval(run, intervalMs);
+    run();
+  }
 
-  setInterval(pollMedia, MEDIA_POLL_INTERVAL_MS);
-  void pollMedia();
-
-  setInterval(pollComments, COMMENTS_POLL_INTERVAL_MS);
-  void pollComments();
-
-  setInterval(pollMetrics, METRICS_POLL_INTERVAL_MS);
-  void pollMetrics();
-
-  setInterval(pollStoryMetrics, STORY_METRICS_POLL_INTERVAL_MS);
-  void pollStoryMetrics();
-
-  setInterval(runInsightsDigest, INSIGHTS_DIGEST_CHECK_INTERVAL_MS);
-  void runInsightsDigest();
+  scheduleGuarded(refreshExpiringTokens, TOKEN_CHECK_INTERVAL_MS);
+  scheduleGuarded(pollMedia, MEDIA_POLL_INTERVAL_MS);
+  scheduleGuarded(pollComments, COMMENTS_POLL_INTERVAL_MS);
+  scheduleGuarded(pollMetrics, METRICS_POLL_INTERVAL_MS);
+  scheduleGuarded(pollStoryMetrics, STORY_METRICS_POLL_INTERVAL_MS);
+  scheduleGuarded(runInsightsDigest, INSIGHTS_DIGEST_CHECK_INTERVAL_MS);
 }
