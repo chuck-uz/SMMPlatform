@@ -7,12 +7,18 @@ import { decrypt } from "@/lib/encryption";
 import { buildCommentReplySystemPrompt, buildCommentUserMessage } from "@/lib/commentReply";
 import { generateCommentReply } from "@/lib/commentReplyClient";
 import { instagramContentClient } from "@/lib/instagramContentClient";
+import { createRateLimiter } from "@/lib/rateLimiter";
+
+// Throttle the paid regenerate action per user so nobody can spam it into
+// unbounded Claude spend.
+const regenerateLimiter = createRateLimiter({ limit: 20, windowMs: 60_000 });
 
 async function requireSession() {
   const session = await auth();
   if (!session?.user) {
     throw new Error("Требуется вход");
   }
+  return session;
 }
 
 async function requireClaudeApiKey(encryptionKey: string) {
@@ -82,7 +88,11 @@ export async function approveCommentReplyAction(params: { commentId: string; mes
 }
 
 export async function regenerateCommentReplyAction(commentId: string) {
-  await requireSession();
+  const session = await requireSession();
+
+  if (!regenerateLimiter.check(session.user!.id ?? "unknown").allowed) {
+    throw new Error("Слишком много перегенераций подряд — подождите минуту");
+  }
 
   const encryptionKey = process.env.ENCRYPTION_KEY;
   if (!encryptionKey) {

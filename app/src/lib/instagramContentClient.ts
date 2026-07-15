@@ -32,8 +32,12 @@ const MEDIA_METRICS: Record<string, string> = {
   STORY: "reach,replies,taps_forward,taps_back,exits",
 };
 
+// A hung connection to Instagram must not stall a poller run indefinitely (which,
+// combined with the fixed interval, would pile up overlapping runs).
+const REQUEST_TIMEOUT_MS = 30_000;
+
 async function fetchJson(url: URL) {
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(`Instagram content API request failed: ${res.status} ${url.pathname} ${body}`);
@@ -157,7 +161,7 @@ export const instagramContentClient = {
     const url = new URL(`${GRAPH_BASE}/${commentId}/replies`);
     url.searchParams.set("message", message);
     url.searchParams.set("access_token", accessToken);
-    const res = await fetch(url, { method: "POST" });
+    const res = await fetch(url, { method: "POST", signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
     if (!res.ok) {
       const bodyText = await res.text().catch(() => "");
       const detail = bodyText.trim().startsWith("<") ? "upstream returned an error page, not JSON" : bodyText.slice(0, 500);

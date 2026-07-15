@@ -42,6 +42,16 @@ export async function runManualInsightsAction(params: { accountId: string }) {
     throw new Error("Ключ Claude не настроен или не проверен — подключите его на странице «Подключения»");
   }
 
+  // Validate the account exists BEFORE spending a paid Claude call — otherwise a
+  // bad accountId would burn a request and only then fail on the FK insert.
+  const account = await prisma.instagramAccount.findUnique({
+    where: { id: params.accountId },
+    select: { id: true },
+  });
+  if (!account) {
+    throw new Error("Аккаунт не найден");
+  }
+
   const now = new Date();
   const from = new Date(now.getTime() - INSIGHTS_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
