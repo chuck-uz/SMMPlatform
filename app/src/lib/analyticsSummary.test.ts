@@ -75,18 +75,33 @@ describe("buildWeekdayPattern", () => {
 });
 
 describe("buildTimeOfDayPattern", () => {
-  it("buckets by hour of day and applies the same minimum-sample threshold", () => {
+  it("buckets by Tashkent (UTC+5) hour of day and applies the minimum-sample threshold", () => {
     const at = (hour: number) => new Date(`2026-07-10T${String(hour).padStart(2, "0")}:00:00Z`);
+    // UTC+5: 02→07:00, 03→08:00, 04→09:00 (morning); 15→20:00 (evening).
     const engagements = [
-      { id: "1", caption: null, mediaProductType: "FEED", postedAt: at(8), totalInteractions: 10 },
-      { id: "2", caption: null, mediaProductType: "FEED", postedAt: at(9), totalInteractions: 20 },
-      { id: "3", caption: null, mediaProductType: "FEED", postedAt: at(10), totalInteractions: 30 },
-      { id: "4", caption: null, mediaProductType: "FEED", postedAt: at(20), totalInteractions: 100 },
+      { id: "1", caption: null, mediaProductType: "FEED", postedAt: at(2), totalInteractions: 10 },
+      { id: "2", caption: null, mediaProductType: "FEED", postedAt: at(3), totalInteractions: 20 },
+      { id: "3", caption: null, mediaProductType: "FEED", postedAt: at(4), totalInteractions: 30 },
+      { id: "4", caption: null, mediaProductType: "FEED", postedAt: at(15), totalInteractions: 100 },
     ];
 
     const pattern = buildTimeOfDayPattern(engagements);
 
     expect(pattern).toEqual([{ key: "morning", label: "Утро (6–12)", averageInteractions: 20, sampleSize: 3 }]);
+  });
+
+  it("shifts a late-UTC post into the correct Tashkent bucket", () => {
+    // 21:00 UTC = 02:00 Tashkent → night, not evening.
+    const at = (hour: number) => new Date(`2026-07-10T${String(hour).padStart(2, "0")}:00:00Z`);
+    const engagements = [
+      { id: "1", caption: null, mediaProductType: "FEED", postedAt: at(21), totalInteractions: 10 },
+      { id: "2", caption: null, mediaProductType: "FEED", postedAt: at(22), totalInteractions: 20 },
+      { id: "3", caption: null, mediaProductType: "FEED", postedAt: at(23), totalInteractions: 30 },
+    ];
+
+    const pattern = buildTimeOfDayPattern(engagements);
+
+    expect(pattern).toEqual([{ key: "night", label: "Ночь (0–6)", averageInteractions: 20, sampleSize: 3 }]);
   });
 });
 

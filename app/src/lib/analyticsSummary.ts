@@ -46,6 +46,14 @@ export function rankMedia(engagements: MediaEngagement[]): { top: MediaEngagemen
 
 const MIN_BUCKET_SAMPLES = 3;
 
+// The agency operates in Tashkent (UTC+5, no DST). Posting-time patterns must be
+// bucketed by local time, not UTC — otherwise the day-of-week / time-of-day
+// labels (e.g. "Вечер (18–24)") are shifted 5 hours off what the manager sees.
+const TASHKENT_OFFSET_MS = 5 * 60 * 60 * 1000;
+function toTashkent(date: Date): Date {
+  return new Date(date.getTime() + TASHKENT_OFFSET_MS);
+}
+
 export interface TimePatternBucket {
   key: string;
   label: string;
@@ -59,7 +67,7 @@ const WEEKDAY_LABELS: Record<number, string> = { 0: "Вс", 1: "Пн", 2: "Вт"
 export function buildWeekdayPattern(engagements: MediaEngagement[]): TimePatternBucket[] {
   const buckets = new Map<number, number[]>();
   for (const engagement of engagements) {
-    const day = engagement.postedAt.getUTCDay();
+    const day = toTashkent(engagement.postedAt).getUTCDay();
     const values = buckets.get(day) ?? [];
     values.push(engagement.totalInteractions);
     buckets.set(day, values);
@@ -80,7 +88,7 @@ const TIME_OF_DAY_BUCKETS: Array<{ key: string; label: string; matches: (hour: n
 export function buildTimeOfDayPattern(engagements: MediaEngagement[]): TimePatternBucket[] {
   return TIME_OF_DAY_BUCKETS.map((bucket) => {
     const values = engagements
-      .filter((engagement) => bucket.matches(engagement.postedAt.getUTCHours()))
+      .filter((engagement) => bucket.matches(toTashkent(engagement.postedAt).getUTCHours()))
       .map((engagement) => engagement.totalInteractions);
     return { key: bucket.key, label: bucket.label, averageInteractions: average(values), sampleSize: values.length };
   }).filter((bucket) => bucket.sampleSize >= MIN_BUCKET_SAMPLES);
