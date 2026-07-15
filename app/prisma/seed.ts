@@ -14,12 +14,18 @@ async function main() {
     throw new Error("ADMIN_EMAIL and ADMIN_PASSWORD must be set in .env to seed the admin user");
   }
 
-  const passwordHash = await bcrypt.hash(password, 12);
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    // Create-only: never overwrite an existing admin's password on redeploy.
+    // The container reseeds on every boot, and overwriting passwordHash here would
+    // silently revert any password changed through /panel/profile back to the env value.
+    console.log(`Admin user already exists, leaving unchanged: ${existing.email}`);
+    return;
+  }
 
-  const user = await prisma.user.upsert({
-    where: { email },
-    update: { passwordHash },
-    create: { email, passwordHash, role: "admin" },
+  const passwordHash = await bcrypt.hash(password, 12);
+  const user = await prisma.user.create({
+    data: { email, passwordHash, role: "admin" },
   });
 
   console.log(`Seeded admin user: ${user.email}`);

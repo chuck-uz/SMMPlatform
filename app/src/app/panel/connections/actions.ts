@@ -9,22 +9,22 @@ import { connectTelegramBot } from "@/lib/telegramBot";
 import { telegramBotClient, sendTelegramMessage } from "@/lib/telegramClient";
 import { encrypt, decrypt } from "@/lib/encryption";
 
-export async function disconnectInstagramAccountAction(accountId: string) {
-  const session = await auth();
-  if (!session?.user) {
-    throw new Error("Требуется вход");
-  }
-
-  await prisma.instagramAccount.delete({ where: { id: accountId } });
-
-  revalidatePath("/panel/connections");
-}
-
 async function requireAdmin() {
   const session = await auth();
   if (session?.user?.role !== "admin") {
     throw new Error("Доступно только администратору");
   }
+}
+
+export async function disconnectInstagramAccountAction(accountId: string) {
+  // Disconnect cascade-deletes all media/comments/metrics/reports for the account —
+  // an irreversible destructive action, so restrict it to admins like every other
+  // mutation in this file (was previously reachable by any manager).
+  await requireAdmin();
+
+  await prisma.instagramAccount.delete({ where: { id: accountId } });
+
+  revalidatePath("/panel/connections");
 }
 
 export async function saveClaudeApiKeyAction(apiKey: string) {

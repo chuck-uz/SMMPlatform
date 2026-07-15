@@ -24,9 +24,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    jwt({ token, user }) {
+    async jwt({ token, user }) {
       if (user) {
         token.role = (user as { role?: string }).role;
+        return token;
+      }
+      // On every subsequent request, re-validate the account against the DB so
+      // that deactivating a user (or changing their role) takes effect on their
+      // next request instead of persisting for the JWT's 30-day lifetime.
+      // Returning null clears the session cookie (see @auth/core session action).
+      if (token.sub) {
+        const dbUser = await prisma.user.findUnique({ where: { id: token.sub } });
+        if (!dbUser || !dbUser.isActive) return null;
+        token.role = dbUser.role;
       }
       return token;
     },

@@ -7,9 +7,23 @@ const globalLimiter = createRateLimiter({ limit: 100, windowMs: 60_000 });
 const loginLimiter = createRateLimiter({ limit: 10, windowMs: 60_000 });
 
 function getClientIp(req: NextRequest): string {
+  // Behind Cloudflare, CF-Connecting-IP is the real client IP set by the proxy
+  // and is not client-spoofable. Fall back to X-Real-IP, then to the LAST
+  // (proxy-appended) X-Forwarded-For entry — never the first, which is
+  // client-controlled and would let an attacker rotate rate-limit buckets to
+  // bypass the login limiter and grow the bucket map without bound.
+  const cfIp = req.headers.get("cf-connecting-ip");
+  if (cfIp) return cfIp.trim();
+
+  const realIp = req.headers.get("x-real-ip");
+  if (realIp) return realIp.trim();
+
   const forwardedFor = req.headers.get("x-forwarded-for");
-  if (forwardedFor) return forwardedFor.split(",")[0].trim();
-  return req.headers.get("x-real-ip") ?? "unknown";
+  if (forwardedFor) {
+    const parts = forwardedFor.split(",");
+    return parts[parts.length - 1].trim();
+  }
+  return "unknown";
 }
 
 function tooManyRequests(resetAt: number) {
