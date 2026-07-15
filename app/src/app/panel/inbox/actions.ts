@@ -35,27 +35,48 @@ export async function approveCommentReplyAction(params: { commentId: string; mes
     throw new Error("ENCRYPTION_KEY не настроен на сервере");
   }
 
-  const comment = await prisma.instagramComment.findUniqueOrThrow({
-    where: { id: params.commentId },
-    include: { media: { include: { account: true } } },
+  // Atomically claim the draft before posting so a double-click, a second open
+  // tab, or two managers approving the same comment cannot post two public
+  // replies. Only a draft_ready/failed comment can be claimed; the transition to
+  // "sending" is the lock.
+  const claim = await prisma.instagramComment.updateMany({
+    where: { id: params.commentId, replyStatus: { in: ["draft_ready", "failed"] } },
+    data: { replyStatus: "sending" },
   });
+  if (claim.count === 0) {
+    throw new Error("Этот комментарий уже отправлен или обрабатывается");
+  }
 
-  const accessToken = decrypt(comment.media.account.accessToken, encryptionKey);
-  const posted = await instagramContentClient.postCommentReply({
-    accessToken,
-    commentId: comment.instagramCommentId,
-    message: params.message,
-  });
+  try {
+    const comment = await prisma.instagramComment.findUniqueOrThrow({
+      where: { id: params.commentId },
+      include: { media: { include: { account: true } } },
+    });
 
-  await prisma.instagramComment.update({
-    where: { id: comment.id },
-    data: {
-      draftReply: params.message,
-      replyStatus: "sent",
-      repliedAt: new Date(),
-      sentReplyId: typeof posted?.id === "string" ? posted.id : null,
-    },
-  });
+    const accessToken = decrypt(comment.media.account.accessToken, encryptionKey);
+    const posted = await instagramContentClient.postCommentReply({
+      accessToken,
+      commentId: comment.instagramCommentId,
+      message: params.message,
+    });
+
+    await prisma.instagramComment.update({
+      where: { id: comment.id },
+      data: {
+        draftReply: params.message,
+        replyStatus: "sent",
+        repliedAt: new Date(),
+        sentReplyId: typeof posted?.id === "string" ? posted.id : null,
+      },
+    });
+  } catch (error) {
+    // Release the lock back to "failed" so the operator can retry.
+    await prisma.instagramComment.update({
+      where: { id: params.commentId },
+      data: { replyStatus: "failed" },
+    });
+    throw error;
+  }
 
   revalidatePath("/panel/inbox");
 }
@@ -74,6 +95,11 @@ export async function regenerateCommentReplyAction(commentId: string) {
     prisma.agentConfig.findUnique({ where: { singleton: "agent" } }),
     prisma.agentKnowledgeDocument.findMany({ select: { title: true, body: true } }),
   ]);
+
+  // Never resurrect an already-sent comment back into the pending queue.
+  if (comment.replyStatus === "sent" || comment.replyStatus === "sending") {
+    throw new Error("Этот комментарий уже отправлен или обрабатывается");
+  }
 
   const systemPrompt = buildCommentReplySystemPrompt({
     commentToneAndRules: agentConfig?.commentToneAndRules ?? "",
