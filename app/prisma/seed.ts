@@ -7,12 +7,15 @@ const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  const email = process.env.ADMIN_EMAIL;
+  const rawEmail = process.env.ADMIN_EMAIL;
   const password = process.env.ADMIN_PASSWORD;
 
-  if (!email || !password) {
+  if (!rawEmail || !password) {
     throw new Error("ADMIN_EMAIL and ADMIN_PASSWORD must be set in .env to seed the admin user");
   }
+
+  // Store the normalized address so it matches the normalized login lookup.
+  const email = rawEmail.trim().toLowerCase();
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {

@@ -35,6 +35,19 @@ describe("createUser", () => {
     expect(await bcrypt.compare("a-strong-password", stored.passwordHash)).toBe(true);
   });
 
+  it("normalizes the email to lowercase and trims it before storing", async () => {
+    const deps = makeDeps();
+
+    const result = await createUser(
+      { email: "  Manager@Example.COM ", password: "a-strong-password", role: "manager" },
+      deps,
+    );
+
+    expect(result.ok).toBe(true);
+    const [stored] = deps.getInserted();
+    expect(stored.email).toBe("manager@example.com");
+  });
+
   it("rejects a malformed email", async () => {
     const deps = makeDeps();
 
