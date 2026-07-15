@@ -30,8 +30,13 @@ export function KnowledgeBaseList({ documents }: { documents: KnowledgeDocumentI
   }
 
   function handleDelete(id: string) {
+    setError(null);
     startTransition(async () => {
-      await deleteKnowledgeDocumentAction(id);
+      try {
+        await deleteKnowledgeDocumentAction(id);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Не удалось удалить документ");
+      }
     });
   }
 
@@ -55,8 +60,9 @@ export function KnowledgeBaseList({ documents }: { documents: KnowledgeDocumentI
               <button
                 type="button"
                 onClick={() => handleDelete(doc.id)}
+                disabled={isPending}
                 aria-label="Удалить документ"
-                className="cursor-pointer rounded-sm p-1.5 text-subtle transition-colors duration-200 hover:bg-destructive/10 hover:text-destructive"
+                className="cursor-pointer rounded-sm p-1.5 text-subtle transition-colors duration-200 hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <TrashIcon className="h-4 w-4" aria-hidden="true" />
               </button>
