@@ -53,7 +53,8 @@ export async function GET(req: NextRequest) {
         connectedByUserId: session.user.id,
       },
     });
-  } catch {
+  } catch (error) {
+    console.error("[instagram-oauth-callback] connect failed", error);
     return NextResponse.redirect(new URL("/panel/connections?error=connect_failed", PUBLIC_URL ?? req.url));
   }
 

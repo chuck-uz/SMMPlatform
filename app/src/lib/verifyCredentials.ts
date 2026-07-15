@@ -25,7 +25,9 @@ export async function verifyCredentials(
     return null;
   }
 
-  const user = await findUser(email);
+  // Look up by the normalized address so casing/whitespace differences at login
+  // match how the email was stored at creation.
+  const user = await findUser(email.trim().toLowerCase());
   if (!user || !user.isActive) return null;
 
   const isValid = await bcrypt.compare(password, user.passwordHash);

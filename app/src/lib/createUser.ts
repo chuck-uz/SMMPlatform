@@ -20,7 +20,11 @@ export async function createUser(
     }) => Promise<CreatedUser>;
   },
 ): Promise<CreateUserResult> {
-  if (!EMAIL_PATTERN.test(input.email)) {
+  // Normalize the email so a user created as "User@Example.com" can log in as
+  // "user@example.com" (login looks up by the normalized address).
+  const email = input.email.trim().toLowerCase();
+
+  if (!EMAIL_PATTERN.test(email)) {
     return { ok: false, error: "Некорректный email" };
   }
 
@@ -32,13 +36,13 @@ export async function createUser(
     return { ok: false, error: "Недопустимая роль" };
   }
 
-  const existing = await deps.findUserByEmail(input.email);
+  const existing = await deps.findUserByEmail(email);
   if (existing) {
     return { ok: false, error: "Пользователь с таким email уже существует" };
   }
 
   const passwordHash = await bcrypt.hash(input.password, 12);
-  const user = await deps.insertUser({ email: input.email, passwordHash, role: input.role });
+  const user = await deps.insertUser({ email, passwordHash, role: input.role });
 
   return { ok: true, user };
 }
