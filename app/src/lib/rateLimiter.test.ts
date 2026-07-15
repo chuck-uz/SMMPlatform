@@ -48,4 +48,18 @@ describe("createRateLimiter", () => {
     const second = limiter.check("1.2.3.4", 1_000);
     expect(second.remaining).toBe(0);
   });
+
+  it("evicts expired buckets so the map does not grow without bound", () => {
+    const limiter = createRateLimiter({ limit: 1, windowMs: 60_000 });
+
+    // 100 distinct keys within the first window.
+    for (let i = 0; i < 100; i += 1) {
+      limiter.check(`ip-${i}`, 0);
+    }
+    expect(limiter.size()).toBe(100);
+
+    // After the window elapses, a new check sweeps the expired buckets.
+    limiter.check("fresh", 60_001);
+    expect(limiter.size()).toBe(1);
+  });
 });
