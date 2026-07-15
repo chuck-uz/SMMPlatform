@@ -14,20 +14,25 @@ export function LoginForm() {
     setError(null);
     setIsSubmitting(true);
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+    try {
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
 
-    setIsSubmitting(false);
+      if (result?.error) {
+        setError("Неверный email или пароль.");
+        return;
+      }
 
-    if (result?.error) {
-      setError("Неверный email или пароль.");
-      return;
+      window.location.assign("/panel");
+    } catch {
+      // Never leave the button stuck in "Входим…" if signIn throws (network error).
+      setError("Не удалось войти. Попробуйте ещё раз.");
+    } finally {
+      setIsSubmitting(false);
     }
-
-    window.location.assign("/panel");
   }
 
   return (

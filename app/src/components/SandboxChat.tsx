@@ -51,16 +51,21 @@ export function SandboxChat({
   const canSave = canSaveAsExample(turns);
 
   function handleSend() {
+    // Guard against a concurrent send when Enter is pressed mid-request — the
+    // button is disabled while pending but the Enter key bypasses that, which
+    // would fork the session and overwrite turns.
+    if (isPending) return;
     if (!message.trim()) return;
     setError(null);
     const text = message;
-    setMessage("");
     startTransition(async () => {
       try {
         const result = await sendSandboxMessageAction({ sessionId, message: text, model });
         setSessionId(result.sessionId);
         setTurns(result.turns);
         setLeadFields(result.leadFields);
+        // Clear only after a successful send so the typed text isn't lost on error.
+        setMessage("");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Не удалось получить ответ агента");
       }
