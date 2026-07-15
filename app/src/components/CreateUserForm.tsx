@@ -1,12 +1,16 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { createUserAction } from "@/app/panel/users/actions";
 
 const initialState: { error?: string } = {};
 
 export function CreateUserForm() {
   const [state, formAction, isPending] = useActionState(createUserAction, initialState);
+  // Controlled so React 19 does not clear these when the action returns a
+  // validation error (uncontrolled form-action fields are auto-reset on submit).
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("manager");
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
@@ -19,6 +23,8 @@ export function CreateUserForm() {
           name="email"
           type="email"
           required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
           className="rounded-sm border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         />
       </div>
@@ -44,7 +50,8 @@ export function CreateUserForm() {
         <select
           id="new-user-role"
           name="role"
-          defaultValue="manager"
+          value={role}
+          onChange={(e) => setRole(e.target.value)}
           className="cursor-pointer rounded-sm border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <option value="manager">Менеджер</option>
