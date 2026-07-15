@@ -4,6 +4,7 @@ const MESSAGES_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 const MODEL = "claude-haiku-4-5-20251001";
 const MAX_TOKENS = 1024;
+const REQUEST_TIMEOUT_MS = 60_000;
 
 const REPLY_OUTPUT_SCHEMA = {
   type: "object",
@@ -33,6 +34,7 @@ export async function generateCommentReply(
       messages: [{ role: "user", content: userMessage }],
       output_config: { format: { type: "json_schema", schema: REPLY_OUTPUT_SCHEMA } },
     }),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
   if (!response.ok) {

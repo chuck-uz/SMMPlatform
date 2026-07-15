@@ -3,6 +3,8 @@ import { parseInsightsContent, type InsightsContent } from "./accountInsights";
 const MESSAGES_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 const MODEL = "claude-sonnet-5";
+const MAX_TOKENS = 3072;
+const REQUEST_TIMEOUT_MS = 120_000;
 
 const SYSTEM_PROMPT = `Ты аналитик и стратег по росту Instagram-аккаунта турагентства, помогающий менеджеру разобраться, что происходит с аккаунтом и что делать дальше.
 Тебе передают JSON за фиксированное 90-дневное окно: тренды по всем ключевым метрикам (первая половина окна против второй), лучшие и худшие публикации, паттерны по дню недели и времени суток, аномалии, вовлечённость по форматам публикаций и сигнал спроса по направлениям из заявок (если есть).
@@ -50,11 +52,12 @@ export async function analyzeAccountInsights(apiKey: string, prompt: string): Pr
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 3072,
+      max_tokens: MAX_TOKENS,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: prompt }],
       output_config: { format: { type: "json_schema", schema: INSIGHTS_OUTPUT_SCHEMA } },
     }),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
   if (!response.ok) {
@@ -64,10 +67,28 @@ export async function analyzeAccountInsights(apiKey: string, prompt: string): Pr
   }
 
   const data = await response.json();
+
+  // The JSON-schema-constrained decoder can force-close a truncated response into
+  // syntactically valid but garbled JSON while still reporting stop_reason "end_turn"
+  // — detect via output_tokens, not stop_reason. (Same guard as the sibling clients.)
+  const outputTokens = data.usage?.output_tokens;
+  if (typeof outputTokens === "number" && outputTokens >= MAX_TOKENS - 16) {
+    throw new Error("Claude ответ обрезан по лимиту токенов — повторите запрос");
+  }
+
   const textBlock = (data.content as Array<{ type: string; text?: string }> | undefined)?.find(
     (block) => block.type === "text",
   );
-  const parsed = parseInsightsContent(textBlock?.text ? JSON.parse(textBlock.text) : null);
+
+  let json: unknown = null;
+  if (textBlock?.text) {
+    try {
+      json = JSON.parse(textBlock.text);
+    } catch {
+      throw new Error("Claude вернул невалидный JSON (возможно, ответ обрезан)");
+    }
+  }
+  const parsed = parseInsightsContent(json);
 
   if (!parsed) {
     throw new Error("Claude returned a response that did not match the expected insights schema");
