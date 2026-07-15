@@ -1,3 +1,4 @@
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { dailyHistory } from "@/lib/instagramPoller";
 import {
@@ -76,21 +77,27 @@ export default async function AnalyticsPage({
     },
   });
 
+  const mediaIds = media.map((item) => item.id);
+
   const [accountSnapshots, mediaSnapshots, demographicsSnapshot, insightReports] = await Promise.all([
     prisma.instagramMetricSnapshot.findMany({
       where: { accountId: selectedAccount.id, scope: "account" },
       select: { capturedAt: true, metrics: true },
       orderBy: { capturedAt: "asc" },
     }),
-    prisma.instagramMetricSnapshot.findMany({
-      where: {
-        accountId: selectedAccount.id,
-        mediaId: { in: media.map((item) => item.id) },
-        scope: { in: ["media", "story"] },
-      },
-      select: { mediaId: true, capturedAt: true, metrics: true },
-      orderBy: { capturedAt: "desc" },
-    }),
+    // Only the latest snapshot per media, not the entire history — DISTINCT ON
+    // (backed by the (mediaId) index) instead of scanning every row and deduping
+    // in JS, which grows unbounded as snapshots accumulate.
+    mediaIds.length === 0
+      ? Promise.resolve([] as Array<{ mediaId: string; metrics: unknown }>)
+      : prisma.$queryRaw<Array<{ mediaId: string; metrics: unknown }>>`
+          SELECT DISTINCT ON ("mediaId") "mediaId", "metrics"
+          FROM "instagram_metric_snapshots"
+          WHERE "accountId" = ${selectedAccount.id}
+            AND "scope" IN ('media', 'story')
+            AND "mediaId" IN (${Prisma.join(mediaIds)})
+          ORDER BY "mediaId", "capturedAt" DESC
+        `,
     prisma.instagramMetricSnapshot.findFirst({
       where: { accountId: selectedAccount.id, scope: "demographics" },
       select: { metrics: true },
@@ -105,7 +112,7 @@ export default async function AnalyticsPage({
 
   const latestMetricsByMediaId = new Map<string, Record<string, unknown>>();
   for (const snapshot of mediaSnapshots) {
-    if (snapshot.mediaId && !latestMetricsByMediaId.has(snapshot.mediaId)) {
+    if (snapshot.mediaId) {
       latestMetricsByMediaId.set(snapshot.mediaId, snapshot.metrics as Record<string, unknown>);
     }
   }
