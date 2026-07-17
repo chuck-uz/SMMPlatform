@@ -4,8 +4,7 @@ const TOKEN_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const REFRESH_THRESHOLD_DAYS = 7;
 
 const MEDIA_POLL_INTERVAL_MS = 15 * 60 * 1000;
-// Временно снижено до 1 мин для удобства ручного тестирования CM1 (вернуть к 5 мин после проверки).
-const COMMENTS_POLL_INTERVAL_MS = 1 * 60 * 1000;
+const COMMENTS_POLL_INTERVAL_MS = 5 * 60 * 1000;
 const METRICS_POLL_INTERVAL_MS = 2 * 60 * 60 * 1000;
 const STORY_METRICS_POLL_INTERVAL_MS = 60 * 60 * 1000;
 const INSIGHTS_DIGEST_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -129,9 +128,6 @@ export async function register() {
               accessToken,
               mediaId: media.instagramMediaId,
             });
-
-            // DIAG (временно): сколько комментов Meta вернула по медиа — проверяем фильтрацию в Dev.
-            console.log(`[comments-poll][DIAG] media ${media.instagramMediaId}: ${rawComments.length} raw comments`);
 
             for (const raw of rawComments) {
               const comment = normalizeComment(raw, media.id);
