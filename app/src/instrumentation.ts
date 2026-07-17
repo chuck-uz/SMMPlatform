@@ -130,6 +130,9 @@ export async function register() {
               mediaId: media.instagramMediaId,
             });
 
+            // DIAG (временно): сколько комментов Meta вернула по медиа — проверяем фильтрацию в Dev.
+            console.log(`[comments-poll][DIAG] media ${media.instagramMediaId}: ${rawComments.length} raw comments`);
+
             for (const raw of rawComments) {
               const comment = normalizeComment(raw, media.id);
 
