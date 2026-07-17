@@ -328,15 +328,15 @@
         "F4"
       ],
       "review": false,
-      "status": "in_progress",
+      "status": "blocked",
       "subtasks": [
         "чтение комментариев",
         "ответ по сценарию (Haiku)",
         "правила по ключевым словам"
       ],
       "done_when": "на новые комментарии приходят корректные ответы",
-      "note": "Реализовано: отдельная функция генерации без извлечения полей заявки (lib/commentReply.ts + lib/commentReplyClient.ts, Haiku), очередь модерации в /panel/inbox (редактируемые черновики, approve/regenerate), переключатель авто-публикации в /panel/scenarios (по умолчанию модерация включена), отдельное поле тона для комментариев (AgentConfig.commentToneAndRules), бэклог существующих комментариев помечен skipped миграцией (не отвечаем задним числом), идемпотентность через InstagramComment.replyStatus + create/catch-P2002 вместо upsert (поллер раньше делал no-op update на каждый комментарий каждые 5 мин — без статуса отвечал бы на один комментарий бесконечно). См. SMM Platform/decisions/cm1-comment-autoreply.md. Проверено локально (typecheck, 150 тестов, браузер desktop+mobile на seed-данных) — реальная генерация через живой Claude-ключ и публикация ответа через Graph API на подключённом аккаунте ещё не проверены на проде.",
-      "updatedAt": "2026-07-15"
+      "note": "Реализовано: отдельная функция генерации без извлечения полей заявки (lib/commentReply.ts + lib/commentReplyClient.ts, Haiku), очередь модерации в /panel/inbox (редактируемые черновики, approve/regenerate), переключатель авто-публикации в /panel/scenarios (по умолчанию модерация включена), отдельное поле тона для комментариев (AgentConfig.commentToneAndRules), бэклог существующих комментариев помечен skipped миграцией (не отвечаем задним числом), идемпотентность через InstagramComment.replyStatus + create/catch-P2002 вместо upsert (поллер раньше делал no-op update на каждый комментарий каждые 5 мин — без статуса отвечал бы на один комментарий бесконечно). См. SMM Platform/decisions/cm1-comment-autoreply.md. Проверено локально (typecheck, 150 тестов, браузер desktop+mobile на seed-данных) — реальная генерация через живой Claude-ключ и публикация ответа через Graph API на подключённом аккаунте ещё не проверены на проде. UPD 2026-07-17: подтверждено на проде с DIAG-логами — в Dev-режиме Instagram не отдаёт комментарии даже принятому тестеру (0 raw comments по всем медиа). Код готов; блокер — доступ Meta: требуется Live (Business Verification + App Review, Advanced Access на instagram_business_manage_comments). См. decisions/cm1-comment-autoreply.md.",
+      "updatedAt": "2026-07-17"
     },
     {
       "id": "CM2",
