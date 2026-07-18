@@ -9,5 +9,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Unit-тесты только под src; Playwright-спеки в e2e/ гоняются отдельно.
+    include: ["src/**/*.test.{ts,tsx}"],
   },
 });

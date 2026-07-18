@@ -61,7 +61,7 @@ export function LeadCard({ lead }: { lead: LeadCardData }) {
   }
 
   return (
-    <div className="rounded-[14px] border border-border bg-card p-5 shadow-card">
+    <div data-testid="lead-card" className="rounded-[14px] border border-border bg-card p-5 shadow-card">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span
