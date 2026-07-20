@@ -1,7 +1,7 @@
 import { parseCommentReplyContent, type CommentReplyContent } from "./commentReply";
 import { complete } from "./llm";
 import { resolveInteraction, type InteractionOverride } from "./llm/resolve";
-import { extractJsonObject } from "./llm/structuredOutput";
+import { extractJsonObject, looksLikeGarbledReply } from "./llm/structuredOutput";
 
 const MAX_TOKENS = 1024;
 const SHAPE = '{"reply": "<публичный ответ на комментарий>"}';
@@ -33,7 +33,13 @@ export async function generateCommentReply(
     schema: REPLY_OUTPUT_SCHEMA,
     schemaName: "comment_reply",
     shape: SHAPE,
-    parse: (text) => parseCommentReplyContent(extractJsonObject(text)),
+    // Same garbled-output guard as the agent dialogue: a comment reply is published
+    // publicly, so structural noise must never reach it.
+    parse: (text) => {
+      const parsed = parseCommentReplyContent(extractJsonObject(text));
+      if (!parsed || looksLikeGarbledReply(parsed.reply)) return null;
+      return parsed;
+    },
   });
 
   console.log(

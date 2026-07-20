@@ -57,12 +57,23 @@ export interface CompleteOutcome<T> {
 // and the comparison screen would report a failing model as costing nothing.
 export class LlmCompletionError extends Error {
   readonly retries: number;
+  // What the model actually sent on the last attempt, capped. Without it a rejection is
+  // unexplainable after the fact — you cannot tell a refusal from a garbled envelope.
+  readonly rawSample: string;
 
-  constructor(message: string, retries: number) {
+  constructor(message: string, retries: number, rawSample: string) {
     super(message);
     this.name = "LlmCompletionError";
     this.retries = retries;
+    this.rawSample = rawSample;
   }
+}
+
+const RAW_SAMPLE_LIMIT = 300;
+
+export function sampleRawResponse(text: string): string {
+  const collapsed = text.replace(/\s+/g, " ").trim();
+  return collapsed.length > RAW_SAMPLE_LIMIT ? `${collapsed.slice(0, RAW_SAMPLE_LIMIT)}…` : collapsed;
 }
 
 export async function complete<T>(options: CompleteOptions<T>): Promise<CompleteOutcome<T>> {
@@ -78,6 +89,7 @@ export async function complete<T>(options: CompleteOptions<T>): Promise<Complete
   const startedAt = Date.now();
   let failure = "";
   let attemptsMade = 0;
+  let lastRawText = "";
 
   for (let attempt = 0; attempt <= 1; attempt++) {
     attemptsMade = attempt + 1;
@@ -94,6 +106,7 @@ export async function complete<T>(options: CompleteOptions<T>): Promise<Complete
       schemaName: options.schemaName,
     });
 
+    lastRawText = result.text;
     const parsed = options.parse(result.text);
 
     if (parsed !== null && !result.truncated) {
@@ -114,7 +127,14 @@ export async function complete<T>(options: CompleteOptions<T>): Promise<Complete
     if (!shouldRepairRetry({ attempt, parsed, truncated: result.truncated })) break;
   }
 
-  throw new LlmCompletionError(`Модель ${options.model} (${options.provider}): ${failure}`, attemptsMade - 1);
+  const rawSample = sampleRawResponse(lastRawText);
+  const detail = rawSample ? ` Ответ модели: ${rawSample}` : "";
+
+  throw new LlmCompletionError(
+    `Модель ${options.model} (${options.provider}): ${failure}.${detail}`,
+    attemptsMade - 1,
+    rawSample,
+  );
 }
 
 export * from "./router";
