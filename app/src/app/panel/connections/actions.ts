@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { connectClaudeApiKey } from "@/lib/claudeApiKey";
-import { claudeApiClient } from "@/lib/claudeApiClient";
+import { connectProviderApiKey } from "@/lib/llm/credentials";
+import { providerVerifier } from "@/lib/llm/verify";
+import { clearModelCache, listModels } from "@/lib/llm/catalog";
+import { isInteractionType, isSupportedProvider } from "@/lib/llm/router";
 import { connectTelegramBot } from "@/lib/telegramBot";
 import { telegramBotClient, sendTelegramMessage } from "@/lib/telegramClient";
 import { encrypt, decrypt } from "@/lib/encryption";
@@ -29,36 +31,102 @@ export async function disconnectInstagramAccountAction(accountId: string) {
   revalidatePath("/panel/connections");
 }
 
-export async function saveClaudeApiKeyAction(apiKey: string) {
+export async function saveProviderKeyAction(provider: string, apiKey: string) {
   await requireAdmin();
+
+  if (!isSupportedProvider(provider)) {
+    throw new Error("Неизвестный провайдер");
+  }
 
   const encryptionKey = process.env.ENCRYPTION_KEY;
   if (!encryptionKey) {
     throw new Error("ENCRYPTION_KEY не настроен на сервере");
   }
 
-  const { encryptedApiKey, verified } = await connectClaudeApiKey(apiKey, {
-    client: claudeApiClient,
+  const { encryptedApiKey, verified } = await connectProviderApiKey(apiKey, {
+    verifier: providerVerifier(provider),
     encrypt: (plaintext) => encrypt(plaintext, encryptionKey),
   });
 
-  await prisma.claudeApiKeyConfig.upsert({
-    where: { singleton: "claude" },
-    create: { singleton: "claude", encryptedApiKey, verified, verifiedAt: new Date() },
+  await prisma.llmProviderCredential.upsert({
+    where: { provider },
+    create: { provider, encryptedApiKey, verified, verifiedAt: new Date() },
     update: { encryptedApiKey, verified, verifiedAt: new Date() },
   });
 
+  // A new key can see a different catalogue than the previous one.
+  clearModelCache(provider);
   revalidatePath("/panel/connections");
 
   return { verified };
 }
 
-export async function removeClaudeApiKeyAction() {
+export async function removeProviderKeyAction(provider: string) {
   await requireAdmin();
 
-  await prisma.claudeApiKeyConfig.deleteMany({ where: { singleton: "claude" } });
+  if (!isSupportedProvider(provider)) {
+    throw new Error("Неизвестный провайдер");
+  }
+
+  await prisma.llmProviderCredential.deleteMany({ where: { provider } });
+  clearModelCache(provider);
 
   revalidatePath("/panel/connections");
+}
+
+export async function saveModelRouteAction(params: { interactionType: string; provider: string; model: string }) {
+  await requireAdmin();
+
+  if (!isInteractionType(params.interactionType)) {
+    throw new Error("Неизвестная точка взаимодействия");
+  }
+  if (!isSupportedProvider(params.provider)) {
+    throw new Error("Неизвестный провайдер");
+  }
+  if (!params.model.trim()) {
+    throw new Error("Укажите модель");
+  }
+
+  const credential = await prisma.llmProviderCredential.findUnique({ where: { provider: params.provider } });
+  if (!credential) {
+    throw new Error("Сначала добавьте API-ключ этого провайдера");
+  }
+
+  await prisma.llmRouteConfig.upsert({
+    where: { interactionType: params.interactionType },
+    create: { interactionType: params.interactionType, provider: params.provider, model: params.model.trim() },
+    update: { provider: params.provider, model: params.model.trim() },
+  });
+
+  revalidatePath("/panel/connections");
+}
+
+// Feeds the model picker. Returns an empty list with a reason rather than throwing, so a
+// provider outage degrades to manual entry instead of breaking the page.
+export async function loadProviderModelsAction(
+  provider: string,
+  forceRefresh = false,
+): Promise<{ models: Array<{ id: string; label: string; supportsStructuredOutputs: boolean }>; error?: string }> {
+  await requireAdmin();
+
+  if (!isSupportedProvider(provider)) {
+    return { models: [], error: "Неизвестный провайдер" };
+  }
+
+  const encryptionKey = process.env.ENCRYPTION_KEY;
+  const credential = await prisma.llmProviderCredential.findUnique({ where: { provider } });
+  if (!encryptionKey || !credential) {
+    return { models: [], error: "Сначала добавьте API-ключ этого провайдера" };
+  }
+
+  try {
+    const models = await listModels(provider, decrypt(credential.encryptedApiKey, encryptionKey), { forceRefresh });
+    return { models };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[connections] failed to list models for ${provider}`, error);
+    return { models: [], error: message };
+  }
 }
 
 export async function saveTelegramBotTokenAction(botToken: string) {
