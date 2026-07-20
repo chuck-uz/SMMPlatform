@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import bcrypt from "bcryptjs";
 import { createUser } from "./createUser";
 
+type InsertedUser = { id: string; email: string; passwordHash: string; role: string };
+
 function makeDeps(existingEmails: string[] = []) {
-  const inserted: any[] = [];
+  const inserted: InsertedUser[] = [];
   return {
     findUserByEmail: async (email: string) =>
       existingEmails.includes(email) ? { id: "existing_user" } : null,
