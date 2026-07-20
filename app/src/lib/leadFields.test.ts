@@ -1,5 +1,50 @@
 import { describe, expect, it } from "vitest";
-import { isLeadComplete, parseAgentReplyContent, type LeadFields } from "./leadFields";
+
+describe("mergeLeadFields", () => {
+  // The bug this exists for: the model returns a full snapshot every turn, and one turn
+  // that omitted "Стамбул" wiped an already-collected destination from the lead.
+  it("keeps a known value when the new snapshot forgot it", () => {
+    const previous = { ...EMPTY, destination: "Стамбул", people: "2" };
+    const incoming = { ...EMPTY, people: "2", dates: "январь" };
+
+    expect(mergeLeadFields(previous, incoming)).toEqual({
+      ...EMPTY,
+      destination: "Стамбул",
+      people: "2",
+      dates: "январь",
+    });
+  });
+
+  it("lets the client correct a value", () => {
+    const previous = { ...EMPTY, destination: "Дубай" };
+    const incoming = { ...EMPTY, destination: "Стамбул" };
+
+    expect(mergeLeadFields(previous, incoming).destination).toBe("Стамбул");
+  });
+
+  it("treats a blank string as no answer, not as an erasure", () => {
+    const previous = { ...EMPTY, contact: "+998935344354" };
+    const incoming = { ...EMPTY, contact: "   " };
+
+    expect(mergeLeadFields(previous, incoming).contact).toBe("+998935344354");
+  });
+
+  it("accumulates across several turns", () => {
+    const turn1 = mergeLeadFields(EMPTY, { ...EMPTY, destination: "Стамбул" });
+    const turn2 = mergeLeadFields(turn1, { ...EMPTY, people: "2" });
+    const turn3 = mergeLeadFields(turn2, { ...EMPTY, contact: "@user" });
+
+    expect(turn3).toEqual({ ...EMPTY, destination: "Стамбул", people: "2", contact: "@user" });
+  });
+
+  it("starts from the incoming snapshot when nothing is known yet", () => {
+    expect(mergeLeadFields(null, { ...EMPTY, destination: "Стамбул" })).toEqual({
+      ...EMPTY,
+      destination: "Стамбул",
+    });
+  });
+});
+import { isLeadComplete, mergeLeadFields, parseAgentReplyContent, type LeadFields } from "./leadFields";
 
 const EMPTY: LeadFields = {
   destination: null,

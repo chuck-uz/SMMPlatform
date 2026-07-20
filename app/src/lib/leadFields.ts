@@ -10,6 +10,28 @@ export interface LeadFields {
 const REQUIRED_FIELDS: Array<keyof LeadFields> = ["destination", "people", "dates", "contact"];
 const FIELD_KEYS: Array<keyof LeadFields> = [...REQUIRED_FIELDS, "budget", "wishes"];
 
+// The model returns a full snapshot of the lead every turn, but it does not reliably repeat
+// what it already collected — one forgetful turn used to wipe a known value (observed: a
+// confirmed "Стамбул" disappearing from the destination mid-dialogue).
+//
+// So a snapshot only ever ADDS or CORRECTS: a real value wins, an empty one keeps what we
+// had. The trade-off is that the agent cannot clear a field — deliberate, since a stale
+// value is far cheaper for the manager than a silently lost one.
+export function mergeLeadFields(previous: LeadFields | null, incoming: LeadFields): LeadFields {
+  const merged = { ...(previous ?? incoming) } as LeadFields;
+
+  for (const key of FIELD_KEYS) {
+    const value = incoming[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      merged[key] = value;
+    } else if (!previous) {
+      merged[key] = null;
+    }
+  }
+
+  return merged;
+}
+
 export function isLeadComplete(fields: LeadFields): boolean {
   return REQUIRED_FIELDS.every((key) => {
     const value = fields[key];

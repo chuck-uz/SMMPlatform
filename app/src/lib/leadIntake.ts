@@ -1,18 +1,23 @@
 import { prisma } from "./prisma";
 import { decrypt } from "./encryption";
-import { isLeadComplete, type LeadFields } from "./leadFields";
+import { isLeadComplete, mergeLeadFields, type LeadFields } from "./leadFields";
 import { buildLeadNotificationText, type LeadNotificationInput } from "./leadNotify";
 import { sendTelegramMessage } from "./telegramClient";
 
 export async function saveLeadDraft(conversationId: string, fields: LeadFields, source: string) {
-  const completeness = isLeadComplete(fields) ? "complete" : "partial";
   const existing = await prisma.lead.findUnique({ where: { conversationId } });
 
+  // Merge, never replace: the model sends a full snapshot each turn but does not reliably
+  // repeat what it already gathered, so a plain overwrite silently drops collected data —
+  // and a lead reaching the manager without a destination is the worst outcome here.
+  const merged = mergeLeadFields(existing, fields);
+  const completeness = isLeadComplete(merged) ? "complete" : "partial";
+
   if (existing) {
-    return prisma.lead.update({ where: { conversationId }, data: { ...fields, completeness } });
+    return prisma.lead.update({ where: { conversationId }, data: { ...merged, completeness } });
   }
 
-  const lead = await prisma.lead.create({ data: { conversationId, ...fields, completeness, source } });
+  const lead = await prisma.lead.create({ data: { conversationId, ...merged, completeness, source } });
   await notifyNewLead(lead);
 
   return lead;
