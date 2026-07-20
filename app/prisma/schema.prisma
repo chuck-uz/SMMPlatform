@@ -60,6 +60,12 @@ model InstagramMedia {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+  // Meta permanently refuses insights for some media (e.g. posted before the account
+  // was converted to a business account). Such media are marked once and then skipped
+  // by the metrics poller instead of being retried every cycle.
+  insightsUnavailable       Boolean  @default(false)
+  insightsUnavailableReason String?
+
   comments          InstagramComment[]
   metricSnapshots   InstagramMetricSnapshot[]
 

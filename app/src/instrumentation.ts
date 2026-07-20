@@ -28,6 +28,7 @@ export async function register() {
     buildDemographicsMetrics,
     dailyHistory,
   } = await import("@/lib/instagramPoller");
+  const { permanentInsightsErrorReason } = await import("@/lib/instagramApiError");
   const { encrypt, decrypt } = await import("@/lib/encryption");
   const {
     buildMediaEngagements,
@@ -245,6 +246,9 @@ export async function register() {
 
         for (const media of account.media) {
           if (media.mediaProductType === "STORY") continue;
+          // Meta will never return insights for this media; asking again every cycle
+          // only burns quota and floods the log.
+          if (media.insightsUnavailable) continue;
 
           // Isolate each media: a deleted post throws on getMediaInsights every tick;
           // that must not abort metric snapshots for the account's other media.
@@ -264,6 +268,17 @@ export async function register() {
             }) as Prisma.InstagramMetricSnapshotUncheckedCreateInput,
           });
           } catch (error) {
+            const permanentReason = permanentInsightsErrorReason(error);
+            if (permanentReason) {
+              await prisma.instagramMedia.update({
+                where: { id: media.id },
+                data: { insightsUnavailable: true, insightsUnavailableReason: permanentReason },
+              });
+              console.warn(
+                `[instagram-metrics-poll] media ${media.instagramMediaId} is permanently insights-ineligible (${permanentReason}); skipping it from now on`,
+              );
+              continue;
+            }
             console.error(`[instagram-metrics-poll] failed for media ${media.instagramMediaId}`, error);
           }
         }
