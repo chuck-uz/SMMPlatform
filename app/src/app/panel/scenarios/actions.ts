@@ -11,7 +11,7 @@ import {
   canSaveAsExample,
   type SandboxTurn,
 } from "@/lib/agentSandbox";
-import { isLeadComplete } from "@/lib/leadFields";
+import { isLeadComplete, mergeLeadFields, type LeadFields } from "@/lib/leadFields";
 
 async function requireAdmin() {
   const session = await auth();
@@ -117,6 +117,11 @@ export async function sendSandboxMessageAction(params: { sessionId: string | nul
   // test here is what clients would get. Model experiments live on the comparison screen.
   const { reply, fields, provider, model } = await respondAndExtractLead(systemPrompt, conversationMessages);
 
+  // Accumulate rather than replace: a turn that forgets an already-collected field must not
+  // erase it (a confirmed destination was observed vanishing mid-dialogue this way).
+  const previousFields = (session?.leadFields as unknown as LeadFields | null) ?? null;
+  const mergedFields = mergeLeadFields(previousFields, fields);
+
   const updatedTurns: SandboxTurn[] = [
     ...turnsWithClientMessage,
     { role: "agent", content: reply, rating: null },
@@ -126,12 +131,12 @@ export async function sendSandboxMessageAction(params: { sessionId: string | nul
     where: { id: params.sessionId ?? "" },
     create: {
       turns: updatedTurns as unknown as Prisma.InputJsonValue,
-      leadFields: fields as unknown as Prisma.InputJsonValue,
+      leadFields: mergedFields as unknown as Prisma.InputJsonValue,
       model,
     },
     update: {
       turns: updatedTurns as unknown as Prisma.InputJsonValue,
-      leadFields: fields as unknown as Prisma.InputJsonValue,
+      leadFields: mergedFields as unknown as Prisma.InputJsonValue,
       model,
     },
   });
@@ -141,8 +146,8 @@ export async function sendSandboxMessageAction(params: { sessionId: string | nul
   return {
     sessionId: saved.id,
     turns: updatedTurns,
-    leadFields: fields,
-    isComplete: isLeadComplete(fields),
+    leadFields: mergedFields,
+    isComplete: isLeadComplete(mergedFields),
     provider,
     model,
   };
