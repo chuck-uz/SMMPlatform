@@ -80,6 +80,14 @@ describe("complete", () => {
     expect(run).toHaveBeenCalledTimes(2);
   });
 
+  // Regression caught on a live DeepSeek run: the model burned two calls and the comparison
+  // table still showed "0 retries", making a weak model look free.
+  it("reports the repair attempt it spent when it ultimately fails", async () => {
+    const run = vi.fn(async () => ok("не json"));
+
+    await expect(complete(options(run))).rejects.toMatchObject({ name: "LlmCompletionError", retries: 1 });
+  });
+
   it("does not append shape instructions when the decoder enforces the schema", async () => {
     const run = vi.fn<(request: CompleteRequest) => Promise<CompleteResult>>(async () => ok('{"reply":"ok"}'));
     await complete(options(run));
