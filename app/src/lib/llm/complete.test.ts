@@ -88,6 +88,15 @@ describe("complete", () => {
     await expect(complete(options(run))).rejects.toMatchObject({ name: "LlmCompletionError", retries: 1 });
   });
 
+  // Without the raw sample a rejection is unexplainable after the fact — you cannot tell a
+  // refusal from a garbled envelope, which is exactly what happened with Opus on prod.
+  it("carries what the model actually sent so the failure can be diagnosed", async () => {
+    const run = vi.fn(async () => ok('  ,что\n\nields":{  '));
+
+    await expect(complete(options(run))).rejects.toMatchObject({ rawSample: ',что ields":{' });
+    await expect(complete(options(run))).rejects.toThrow(/Ответ модели/);
+  });
+
   it("does not append shape instructions when the decoder enforces the schema", async () => {
     const run = vi.fn<(request: CompleteRequest) => Promise<CompleteResult>>(async () => ok('{"reply":"ok"}'));
     await complete(options(run));

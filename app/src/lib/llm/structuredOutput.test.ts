@@ -3,6 +3,7 @@ import {
   buildRepairInstruction,
   buildStructuredOutputInstruction,
   extractJsonObject,
+  looksLikeGarbledReply,
   parseStructuredReply,
   pickOutputMechanism,
   shouldRepairRetry,
@@ -87,6 +88,52 @@ describe("extractJsonObject", () => {
   });
 });
 
+describe("looksLikeGarbledReply", () => {
+  // Real case from prod: Opus returned a structurally valid object whose reply text was a
+  // fragment of the JSON envelope. Nothing was truncated — 311 of 4096 tokens — so the
+  // token-budget guard could not catch it.
+  it("rejects the JSON fragment that leaked into a real reply", () => {
+    expect(looksLikeGarbledReply(',чтоields":{')).toBe(true);
+  });
+
+  it("rejects text carrying our own schema keys", () => {
+    expect(looksLikeGarbledReply('{"reply": "привет"')).toBe(true);
+    expect(looksLikeGarbledReply('привет","fields":{')).toBe(true);
+  });
+
+  it("rejects text opening with punctuation no sentence starts with", () => {
+    expect(looksLikeGarbledReply(", привет")).toBe(true);
+    expect(looksLikeGarbledReply("} привет")).toBe(true);
+    expect(looksLikeGarbledReply("]: привет")).toBe(true);
+  });
+
+  it("rejects json key-value syntax anywhere in the text", () => {
+    expect(looksLikeGarbledReply('текст":[ещё')).toBe(true);
+    expect(looksLikeGarbledReply('текст":"ещё')).toBe(true);
+  });
+
+  it("rejects text with no letters at all", () => {
+    expect(looksLikeGarbledReply("{}[]")).toBe(true);
+    expect(looksLikeGarbledReply("   ")).toBe(true);
+  });
+
+  // False positives here would silently block good answers, so ordinary replies —
+  // including short ones and ones containing quotes — must pass.
+  it("accepts ordinary agent replies", () => {
+    expect(looksLikeGarbledReply("Здравствуйте! Куда хотели бы поехать?")).toBe(false);
+    expect(looksLikeGarbledReply("Да")).toBe(false);
+    expect(looksLikeGarbledReply("Отлично, Стамбул — прекрасный выбор.")).toBe(false);
+  });
+
+  it("accepts replies that legitimately quote the client", () => {
+    expect(looksLikeGarbledReply('Вы написали "хочу в Дубай" — уточню даты.')).toBe(false);
+  });
+
+  it("accepts replies mentioning prices and punctuation", () => {
+    expect(looksLikeGarbledReply("Бюджет 2000$ — записал. На какие даты?")).toBe(false);
+  });
+});
+
 describe("parseStructuredReply", () => {
   const valid = {
     reply: "Здравствуйте!",
@@ -103,6 +150,13 @@ describe("parseStructuredReply", () => {
 
   it("returns null when the object does not match the lead-reply shape", () => {
     expect(parseStructuredReply('{"reply":"hi"}')).toBeNull();
+  });
+
+  // Treating a garbled reply as unparsed is what lets the existing repair retry fire,
+  // instead of shipping structural noise to a customer.
+  it("rejects a structurally valid object whose reply text is garbled", () => {
+    const garbled = { ...valid, reply: ',чтоields":{' };
+    expect(parseStructuredReply(JSON.stringify(garbled))).toBeNull();
   });
 
   it("returns null for null or empty input", () => {

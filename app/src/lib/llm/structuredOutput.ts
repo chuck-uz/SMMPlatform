@@ -92,9 +92,43 @@ export function extractJsonObject(text: string): unknown | null {
   return null;
 }
 
+// Structural validation is not enough. Observed on prod: Opus 4.8 returned a schema-valid
+// object whose `reply` was `,чтоields":{` — a fragment of the JSON envelope — using 311 of
+// 4096 tokens, so the truncation guard had nothing to catch. Without this check that string
+// would have been sent to a customer verbatim.
+//
+// Deliberately conservative: a false positive silently blocks a good answer, so each rule
+// targets something no ordinary sentence contains.
+export function looksLikeGarbledReply(reply: string): boolean {
+  const text = reply.trim();
+
+  // Nothing to say, or nothing resembling words.
+  if (!/\p{L}/u.test(text)) return true;
+
+  // Our own envelope keys leaking into the visible text.
+  if (/"?(reply|fields)"?\s*:/i.test(text)) return true;
+  if (/(eply|ields)"\s*:/.test(text)) return true;
+
+  // JSON key-value punctuation: `":{`, `":[`, `":"`.
+  if (/"\s*:\s*[{["]/.test(text)) return true;
+
+  // No sentence opens with these.
+  if (/^[,}\]:]/.test(text)) return true;
+
+  return false;
+}
+
 export function parseStructuredReply(text: string | null | undefined): AgentReplyContent | null {
   if (!text) return null;
-  return parseAgentReplyContent(extractJsonObject(text));
+
+  const parsed = parseAgentReplyContent(extractJsonObject(text));
+  if (!parsed) return null;
+
+  // Reported as "unparsed" on purpose: that is what triggers the existing repair retry,
+  // and then an honest failure rather than a garbled message to the client.
+  if (looksLikeGarbledReply(parsed.reply)) return null;
+
+  return parsed;
 }
 
 export interface RepairDecisionInput {
