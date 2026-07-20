@@ -209,3 +209,58 @@ model TelegramNotificationRecipient {
 
   @@map("telegram_notification_recipients")
 }
+
+model LlmProviderCredential {
+  id              String    @id @default(cuid())
+  provider        String    @unique
+  encryptedApiKey String
+  verified        Boolean   @default(false)
+  verifiedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("llm_provider_credentials")
+}
+
+model LlmRouteConfig {
+  id              String   @id @default(cuid())
+  interactionType String   @unique
+  provider        String
+  model           String
+  updatedAt       DateTime @updatedAt
+
+  @@map("llm_route_configs")
+}
+
+model ModelComparisonRun {
+  id             String   @id @default(cuid())
+  scenarioSource String
+  scenarioTurns  Json
+  createdAt      DateTime @default(now())
+
+  results ModelComparisonResult[]
+
+  @@index([createdAt])
+  @@map("model_comparison_runs")
+}
+
+model ModelComparisonResult {
+  id           String             @id @default(cuid())
+  runId        String
+  run          ModelComparisonRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  provider     String
+  model        String
+  turnIndex    Int
+  reply        String?
+  fields       Json?
+  mechanism    String
+  retries      Int                @default(0)
+  latencyMs    Int
+  inputTokens  Int?
+  outputTokens Int?
+  error        String?
+  createdAt    DateTime           @default(now())
+
+  @@index([runId])
+  @@map("model_comparison_results")
+}
