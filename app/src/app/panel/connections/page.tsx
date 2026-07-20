@@ -5,7 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { daysUntilExpiry } from "@/lib/instagramOAuth";
 import { DisconnectInstagramButton } from "@/components/DisconnectInstagramButton";
 import { InstagramReadDiagnosticButton } from "@/components/InstagramReadDiagnosticButton";
-import { ClaudeApiKeyForm } from "@/components/ClaudeApiKeyForm";
+import { ProviderKeysForm } from "@/components/ProviderKeysForm";
+import { ModelRoutesForm } from "@/components/ModelRoutesForm";
+import { INTERACTION_TYPES, resolveRoute } from "@/lib/llm/router";
 import { TelegramBotForm } from "@/components/TelegramBotForm";
 import { TelegramRecipientsList } from "@/components/TelegramRecipientsList";
 
@@ -36,9 +38,16 @@ export default async function ConnectionsPage({
   const session = await auth();
   const isAdmin = session?.user?.role === "admin";
 
-  const claudeConfig = isAdmin
-    ? await prisma.claudeApiKeyConfig.findUnique({ where: { singleton: "claude" } })
-    : null;
+  const providerCredentials = isAdmin
+    ? await prisma.llmProviderCredential.findMany({ select: { provider: true, verified: true } })
+    : [];
+  const routeRows = isAdmin ? await prisma.llmRouteConfig.findMany() : [];
+  // Show every interaction point, falling back to the built-in default when a row is absent.
+  const routes = INTERACTION_TYPES.map((interactionType) => {
+    const target = resolveRoute(interactionType, routeRows);
+    return { interactionType, provider: target.provider, model: target.model };
+  });
+
   const telegramConfig = isAdmin
     ? await prisma.telegramBotConfig.findUnique({ where: { singleton: "telegram" } })
     : null;
@@ -206,13 +215,26 @@ export default async function ConnectionsPage({
 
       {isAdmin && (
         <>
-          <h2 className="mt-9 text-[13.5px] font-semibold text-foreground">Claude API</h2>
+          <h2 className="mt-9 text-[13.5px] font-semibold text-foreground">Провайдеры моделей</h2>
           <p className="mt-1 max-w-[640px] text-[12.5px] leading-relaxed text-muted-foreground">
-            Ключ используется для аналитики, контент-плана и автоответов. Хранится
-            зашифрованным, доступен только администратору.
+            Ключи хранятся зашифрованными и доступны только администратору. Достаточно одного
+            провайдера — остальные нужны, чтобы сравнивать модели между собой.
           </p>
-          <div className="mt-3 max-w-[1020px] rounded-[14px] border border-border bg-card p-5 shadow-card">
-            <ClaudeApiKeyForm hasKey={!!claudeConfig} verified={claudeConfig?.verified ?? false} />
+          <div className="mt-3 max-w-[1020px]">
+            <ProviderKeysForm credentials={providerCredentials} />
+          </div>
+
+          <h2 className="mt-9 text-[13.5px] font-semibold text-foreground">Модель на точку взаимодействия</h2>
+          <p className="mt-1 max-w-[640px] text-[12.5px] leading-relaxed text-muted-foreground">
+            Каждая точка настраивается отдельно, поэтому эксперименты с моделью для клиентов не
+            задевают внутренний AI-разбор. Список моделей подтягивается у провайдера; если нужной
+            в нём ещё нет — впишите ID вручную.
+          </p>
+          <div className="mt-3 max-w-[1020px]">
+            <ModelRoutesForm
+              routes={routes}
+              availableProviders={providerCredentials.map((credential) => credential.provider)}
+            />
           </div>
 
           <h2 className="mt-9 text-[13.5px] font-semibold text-foreground">Telegram-бот</h2>
