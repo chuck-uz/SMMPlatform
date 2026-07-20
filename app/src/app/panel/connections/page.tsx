@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { daysUntilExpiry } from "@/lib/instagramOAuth";
 import { DisconnectInstagramButton } from "@/components/DisconnectInstagramButton";
+import { InstagramReadDiagnosticButton } from "@/components/InstagramReadDiagnosticButton";
 import { ClaudeApiKeyForm } from "@/components/ClaudeApiKeyForm";
 import { TelegramBotForm } from "@/components/TelegramBotForm";
 import { TelegramRecipientsList } from "@/components/TelegramRecipientsList";
@@ -189,6 +190,11 @@ export default async function ConnectionsPage({
                         : stats.demographicsCount > 0
                           ? `собрана (${formatRelativeTime(stats.demographicsLast, now)})`
                           : "ещё не собрана"}
+                    </div>
+                  )}
+                  {isAdmin && (
+                    <div className="px-[22px] pb-4">
+                      <InstagramReadDiagnosticButton accountId={account.id} />
                     </div>
                   )}
                 </div>

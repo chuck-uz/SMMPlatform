@@ -8,6 +8,8 @@ import { claudeApiClient } from "@/lib/claudeApiClient";
 import { connectTelegramBot } from "@/lib/telegramBot";
 import { telegramBotClient, sendTelegramMessage } from "@/lib/telegramClient";
 import { encrypt, decrypt } from "@/lib/encryption";
+import { instagramContentClient } from "@/lib/instagramContentClient";
+import { diagnoseInstagramRead } from "@/lib/instagramReadDiagnostic";
 
 async function requireAdmin() {
   const session = await auth();
@@ -150,4 +152,50 @@ export async function sendTestTelegramMessageAction() {
   }
 
   return { sent, failed, errors };
+}
+
+export type InstagramReadDiagnosticResult =
+  | ({ ok: true; username: string } & Awaited<ReturnType<typeof diagnoseInstagramRead>>)
+  | { ok: false; stage: "network" | "api"; error: string };
+
+// Live, on-demand probe run from the server that hosts the app — so it tests two
+// things at once that a laptop can't: whether Standard Access actually returns
+// comment data (see diagnoseInstagramRead), and whether the request even reaches
+// graph.instagram.com from this host (an egress block from a RU-hosted server
+// surfaces here as a network-stage failure, not an empty result).
+export async function runInstagramReadDiagnosticAction(
+  accountId: string,
+): Promise<InstagramReadDiagnosticResult> {
+  await requireAdmin();
+
+  const encryptionKey = process.env.ENCRYPTION_KEY;
+  if (!encryptionKey) {
+    throw new Error("ENCRYPTION_KEY не настроен на сервере");
+  }
+
+  const account = await prisma.instagramAccount.findUnique({ where: { id: accountId } });
+  if (!account) {
+    throw new Error("Аккаунт не найден");
+  }
+
+  const accessToken = decrypt(account.accessToken, encryptionKey);
+
+  try {
+    const media = await instagramContentClient.listMedia({ accessToken });
+    const newestComments =
+      media.length > 0
+        ? await instagramContentClient.listComments({ accessToken, mediaId: media[0].id })
+        : null;
+    const diagnosis = diagnoseInstagramRead({ media, newestComments });
+    return { ok: true, username: account.username, ...diagnosis };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // The content client throws "Instagram content API request failed: <status> …"
+    // when Instagram answered with a non-2xx (token/permission problem). Anything
+    // else — a thrown fetch/AbortError before a response — means the request never
+    // completed: DNS/TLS/timeout, i.e. the egress path to Meta is the suspect.
+    const stage: "network" | "api" = message.includes("request failed:") ? "api" : "network";
+    console.error(`[ig-read-diagnostic] account ${accountId} failed at ${stage} stage`, error);
+    return { ok: false, stage, error: message };
+  }
 }
