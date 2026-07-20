@@ -1,10 +1,12 @@
 import { parseInsightsContent, type InsightsContent } from "./accountInsights";
+import { complete } from "./llm";
+import { resolveInteraction, type InteractionOverride } from "./llm/resolve";
+import { extractJsonObject } from "./llm/structuredOutput";
 
-const MESSAGES_URL = "https://api.anthropic.com/v1/messages";
-const ANTHROPIC_VERSION = "2023-06-01";
-const MODEL = "claude-sonnet-5";
 const MAX_TOKENS = 3072;
-const REQUEST_TIMEOUT_MS = 120_000;
+
+const SHAPE =
+  '{"summary": "...", "observations": ["..."], "gaps": ["..."], "direction": "...", "recommendations": ["..."]}';
 
 const SYSTEM_PROMPT = `Ты аналитик и стратег по росту Instagram-аккаунта турагентства, помогающий менеджеру разобраться, что происходит с аккаунтом и что делать дальше.
 Тебе передают JSON за фиксированное 90-дневное окно: тренды по всем ключевым метрикам (первая половина окна против второй), лучшие и худшие публикации, паттерны по дню недели и времени суток, аномалии, вовлечённость по форматам публикаций и сигнал спроса по направлениям из заявок (если есть).
@@ -42,57 +44,30 @@ const INSIGHTS_OUTPUT_SCHEMA = {
   additionalProperties: false,
 };
 
-export async function analyzeAccountInsights(apiKey: string, prompt: string): Promise<InsightsContent> {
-  const response = await fetch(MESSAGES_URL, {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": ANTHROPIC_VERSION,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: MAX_TOKENS,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: prompt }],
-      output_config: { format: { type: "json_schema", schema: INSIGHTS_OUTPUT_SCHEMA } },
-    }),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+export async function analyzeAccountInsights(
+  prompt: string,
+  override?: InteractionOverride,
+): Promise<InsightsContent> {
+  const resolved = await resolveInteraction("analytics", override);
+
+  const outcome = await complete({
+    provider: resolved.provider,
+    model: resolved.model,
+    apiKey: resolved.apiKey,
+    supportsStructuredOutputs: resolved.supportsStructuredOutputs,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: "user", content: prompt }],
+    maxTokens: MAX_TOKENS,
+    schema: INSIGHTS_OUTPUT_SCHEMA,
+    schemaName: "account_insights",
+    shape: SHAPE,
+    parse: (text) => parseInsightsContent(extractJsonObject(text)),
   });
 
-  if (!response.ok) {
-    const bodyText = await response.text();
-    const detail = bodyText.trim().startsWith("<") ? "upstream returned an error page, not JSON" : bodyText.slice(0, 500);
-    throw new Error(`Claude API error ${response.status}: ${detail}`);
-  }
-
-  const data = await response.json();
-
-  // The JSON-schema-constrained decoder can force-close a truncated response into
-  // syntactically valid but garbled JSON while still reporting stop_reason "end_turn"
-  // — detect via output_tokens, not stop_reason. (Same guard as the sibling clients.)
-  const outputTokens = data.usage?.output_tokens;
-  if (typeof outputTokens === "number" && outputTokens >= MAX_TOKENS - 16) {
-    throw new Error("Claude ответ обрезан по лимиту токенов — повторите запрос");
-  }
-
-  const textBlock = (data.content as Array<{ type: string; text?: string }> | undefined)?.find(
-    (block) => block.type === "text",
+  console.log(
+    `[claudeInsightsClient] ${resolved.provider}/${resolved.model} mechanism=${outcome.mechanism} ` +
+      `retries=${outcome.retries} ${outcome.latencyMs}ms output_tokens=${outcome.outputTokens}`,
   );
 
-  let json: unknown = null;
-  if (textBlock?.text) {
-    try {
-      json = JSON.parse(textBlock.text);
-    } catch {
-      throw new Error("Claude вернул невалидный JSON (возможно, ответ обрезан)");
-    }
-  }
-  const parsed = parseInsightsContent(json);
-
-  if (!parsed) {
-    throw new Error("Claude returned a response that did not match the expected insights schema");
-  }
-
-  return parsed;
+  return outcome.value;
 }

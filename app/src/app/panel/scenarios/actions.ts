@@ -4,13 +4,11 @@ import { revalidatePath } from "next/cache";
 import type { Prisma } from "@/generated/prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { decrypt } from "@/lib/encryption";
 import { respondAndExtractLead } from "@/lib/agentClient";
 import { buildConversationMessages, buildSystemPrompt } from "@/lib/agentPrompt";
 import {
   buildExampleDialogueTurns,
   canSaveAsExample,
-  isValidSandboxModel,
   type SandboxTurn,
 } from "@/lib/agentSandbox";
 import { isLeadComplete } from "@/lib/leadFields";
@@ -100,30 +98,8 @@ async function buildCurrentSystemPrompt() {
   });
 }
 
-async function requireClaudeApiKey(encryptionKey: string) {
-  const claudeConfig = await prisma.claudeApiKeyConfig.findUnique({ where: { singleton: "claude" } });
-  if (!claudeConfig?.verified) {
-    throw new Error("Ключ Claude не настроен или не проверен — подключите его на странице «Подключения»");
-  }
-  return decrypt(claudeConfig.encryptedApiKey, encryptionKey);
-}
-
-export async function sendSandboxMessageAction(params: {
-  sessionId: string | null;
-  message: string;
-  model: string;
-}) {
+export async function sendSandboxMessageAction(params: { sessionId: string | null; message: string }) {
   await requireAdmin();
-
-  if (!isValidSandboxModel(params.model)) {
-    throw new Error("Неизвестная модель");
-  }
-
-  const encryptionKey = process.env.ENCRYPTION_KEY;
-  if (!encryptionKey) {
-    throw new Error("ENCRYPTION_KEY не настроен на сервере");
-  }
-  const apiKey = await requireClaudeApiKey(encryptionKey);
 
   const session = params.sessionId
     ? await prisma.agentSandboxSession.findUniqueOrThrow({ where: { id: params.sessionId } })
@@ -137,12 +113,9 @@ export async function sendSandboxMessageAction(params: {
 
   const systemPrompt = await buildCurrentSystemPrompt();
   const conversationMessages = buildConversationMessages(turnsWithClientMessage);
-  const { reply, fields } = await respondAndExtractLead(
-    apiKey,
-    systemPrompt,
-    conversationMessages,
-    params.model,
-  );
+  // The sandbox now exercises the agent exactly as configured in «Подключения», so what you
+  // test here is what clients would get. Model experiments live on the comparison screen.
+  const { reply, fields, provider, model } = await respondAndExtractLead(systemPrompt, conversationMessages);
 
   const updatedTurns: SandboxTurn[] = [
     ...turnsWithClientMessage,
@@ -154,18 +127,25 @@ export async function sendSandboxMessageAction(params: {
     create: {
       turns: updatedTurns as unknown as Prisma.InputJsonValue,
       leadFields: fields as unknown as Prisma.InputJsonValue,
-      model: params.model,
+      model,
     },
     update: {
       turns: updatedTurns as unknown as Prisma.InputJsonValue,
       leadFields: fields as unknown as Prisma.InputJsonValue,
-      model: params.model,
+      model,
     },
   });
 
   revalidatePath("/panel/scenarios");
 
-  return { sessionId: saved.id, turns: updatedTurns, leadFields: fields, isComplete: isLeadComplete(fields) };
+  return {
+    sessionId: saved.id,
+    turns: updatedTurns,
+    leadFields: fields,
+    isComplete: isLeadComplete(fields),
+    provider,
+    model,
+  };
 }
 
 export async function rateSandboxTurnAction(params: {

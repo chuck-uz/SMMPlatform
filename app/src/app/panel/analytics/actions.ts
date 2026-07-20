@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import type { Prisma } from "@/generated/prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { decrypt } from "@/lib/encryption";
 import { analyzeAccountInsights } from "@/lib/claudeInsightsClient";
 import {
   buildMediaFormatEngagements,
@@ -34,12 +33,6 @@ export async function runManualInsightsAction(params: { accountId: string }) {
   const session = await auth();
   if (!session?.user) {
     throw new Error("Требуется вход");
-  }
-
-  const encryptionKey = process.env.ENCRYPTION_KEY;
-  const claudeConfig = await prisma.claudeApiKeyConfig.findUnique({ where: { singleton: "claude" } });
-  if (!encryptionKey || !claudeConfig?.verified) {
-    throw new Error("Ключ Claude не настроен или не проверен — подключите его на странице «Подключения»");
   }
 
   // Validate the account exists BEFORE spending a paid Claude call — otherwise a
@@ -120,8 +113,7 @@ export async function runManualInsightsAction(params: { accountId: string }) {
   };
 
   const prompt = buildInsightsPrompt(inputs);
-  const apiKey = decrypt(claudeConfig.encryptedApiKey, encryptionKey);
-  const content = await analyzeAccountInsights(apiKey, prompt);
+  const content = await analyzeAccountInsights(prompt);
 
   await prisma.accountInsightReport.create({
     data: {

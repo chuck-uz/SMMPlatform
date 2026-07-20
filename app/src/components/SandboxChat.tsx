@@ -8,7 +8,7 @@ import {
   saveSandboxSessionAsExampleAction,
   sendSandboxMessageAction,
 } from "@/app/panel/scenarios/actions";
-import { canSaveAsExample, DEFAULT_SANDBOX_MODEL, SANDBOX_MODEL_OPTIONS, type SandboxTurn } from "@/lib/agentSandbox";
+import { canSaveAsExample, DEFAULT_SANDBOX_MODEL, type SandboxTurn } from "@/lib/agentSandbox";
 import { isLeadComplete, type LeadFields } from "@/lib/leadFields";
 
 const EMPTY_LEAD_FIELDS: LeadFields = {
@@ -60,10 +60,12 @@ export function SandboxChat({
     const text = message;
     startTransition(async () => {
       try {
-        const result = await sendSandboxMessageAction({ sessionId, message: text, model });
+        const result = await sendSandboxMessageAction({ sessionId, message: text });
         setSessionId(result.sessionId);
         setTurns(result.turns);
         setLeadFields(result.leadFields);
+        // Report back which model actually answered, so it is obvious what is being tested.
+        setModel(`${result.provider}/${result.model}`);
         // Clear only after a successful send so the typed text isn't lost on error.
         setMessage("");
       } catch (err) {
@@ -190,23 +192,16 @@ export function SandboxChat({
       ) : null}
 
       <div className="border-t border-border p-4">
-        <div className="mb-3 flex items-center gap-2">
-          <label htmlFor="sandbox-model" className="text-[11.5px] font-medium text-subtle">
-            Модель
-          </label>
-          <select
-            id="sandbox-model"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            disabled={isPending}
-            className="rounded-sm border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {SANDBOX_MODEL_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+        {/* The sandbox exercises the agent exactly as configured, so the model is shown,
+            not chosen here. Trying other models is what the comparison screen is for. */}
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-[11.5px] text-subtle">
+          <span className="font-medium">Модель</span>
+          <code className="rounded-sm border border-border bg-background px-2 py-1 text-xs text-foreground">
+            {model}
+          </code>
+          <a href="/panel/connections" className="underline underline-offset-2 hover:text-foreground">
+            изменить
+          </a>
         </div>
         <div className="flex gap-2">
           <input

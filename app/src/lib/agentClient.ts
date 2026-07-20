@@ -1,7 +1,8 @@
-import { parseAgentReplyContent, type AgentReplyContent } from "./leadFields";
+import type { AgentReplyContent } from "./leadFields";
+import { complete } from "./llm";
+import { resolveInteraction, type InteractionOverride } from "./llm/resolve";
+import { parseStructuredReply } from "./llm/structuredOutput";
 
-const MESSAGES_URL = "https://api.anthropic.com/v1/messages";
-const ANTHROPIC_VERSION = "2023-06-01";
 const MAX_TOKENS = 4096;
 
 const REPLY_OUTPUT_SCHEMA = {
@@ -26,58 +27,49 @@ const REPLY_OUTPUT_SCHEMA = {
   additionalProperties: false,
 };
 
+export interface AgentReplyOutcome extends AgentReplyContent {
+  provider: string;
+  model: string;
+  mechanism: string;
+  retries: number;
+  latencyMs: number;
+  inputTokens?: number;
+  outputTokens?: number;
+}
+
 export async function respondAndExtractLead(
-  apiKey: string,
   systemPrompt: string,
   messages: Array<{ role: "user" | "assistant"; content: string }>,
-  model: string,
-): Promise<AgentReplyContent> {
-  const startedAt = Date.now();
-  const response = await fetch(MESSAGES_URL, {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": ANTHROPIC_VERSION,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: MAX_TOKENS,
-      system: systemPrompt,
-      messages,
-      output_config: { format: { type: "json_schema", schema: REPLY_OUTPUT_SCHEMA } },
-    }),
+  override?: InteractionOverride,
+): Promise<AgentReplyOutcome> {
+  const resolved = await resolveInteraction("agent_dialog", override);
+
+  const outcome = await complete({
+    provider: resolved.provider,
+    model: resolved.model,
+    apiKey: resolved.apiKey,
+    supportsStructuredOutputs: resolved.supportsStructuredOutputs,
+    system: systemPrompt,
+    messages,
+    maxTokens: MAX_TOKENS,
+    schema: REPLY_OUTPUT_SCHEMA,
+    schemaName: "lead_reply",
+    parse: parseStructuredReply,
   });
-  console.log(`[agentClient] Claude call took ${Date.now() - startedAt}ms, status ${response.status}`);
 
-  if (!response.ok) {
-    const bodyText = await response.text();
-    const detail = bodyText.trim().startsWith("<") ? "upstream returned an error page, not JSON" : bodyText.slice(0, 500);
-    throw new Error(`Claude API error ${response.status}: ${detail}`);
-  }
-
-  const data = await response.json();
-  const outputTokens = data.usage?.output_tokens;
   console.log(
-    `[agentClient] stop_reason=${data.stop_reason}, output_tokens=${outputTokens}, max_tokens=${MAX_TOKENS}, model=${model}`,
+    `[agentClient] ${resolved.provider}/${resolved.model} mechanism=${outcome.mechanism} ` +
+      `retries=${outcome.retries} ${outcome.latencyMs}ms output_tokens=${outcome.outputTokens}`,
   );
 
-  // The JSON-schema-constrained decoder can force-close a truncated response into
-  // syntactically valid but garbled JSON once the token budget runs out, while still
-  // reporting stop_reason "end_turn" — so budget exhaustion must be detected via
-  // output_tokens, not stop_reason alone.
-  if (typeof outputTokens === "number" && outputTokens >= MAX_TOKENS - 16) {
-    throw new Error("Claude ответ обрезан по лимиту токенов — повторите запрос");
-  }
-
-  const textBlock = (data.content as Array<{ type: string; text?: string }> | undefined)?.find(
-    (block) => block.type === "text",
-  );
-  const parsed = parseAgentReplyContent(textBlock?.text ? JSON.parse(textBlock.text) : null);
-
-  if (!parsed) {
-    throw new Error("Claude вернул ответ, не соответствующий ожидаемой схеме");
-  }
-
-  return parsed;
+  return {
+    ...outcome.value,
+    provider: resolved.provider,
+    model: resolved.model,
+    mechanism: outcome.mechanism,
+    retries: outcome.retries,
+    latencyMs: outcome.latencyMs,
+    inputTokens: outcome.inputTokens,
+    outputTokens: outcome.outputTokens,
+  };
 }

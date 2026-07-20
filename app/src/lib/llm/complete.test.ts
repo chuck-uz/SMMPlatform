@@ -29,7 +29,7 @@ function options(run: (request: CompleteRequest) => Promise<CompleteResult>) {
 
 describe("complete", () => {
   it("returns the parsed value without retrying when the first answer is good", async () => {
-    const run = vi.fn(async () => ok('{"reply":"ok"}'));
+    const run = vi.fn<(request: CompleteRequest) => Promise<CompleteResult>>(async () => ok('{"reply":"ok"}'));
     const outcome = await complete(options(run));
 
     expect(outcome.value).toEqual({ reply: "ok" });
@@ -76,12 +76,12 @@ describe("complete", () => {
   it("gives up after one repair and names the model that failed", async () => {
     const run = vi.fn(async () => ok("всё ещё не json"));
 
-    await expect(complete(options(run))).rejects.toThrow(/claude-haiku-4-5-20251001.*anthropic/s);
+    await expect(complete(options(run))).rejects.toThrow(/claude-haiku-4-5-20251001.*anthropic/);
     expect(run).toHaveBeenCalledTimes(2);
   });
 
   it("does not append shape instructions when the decoder enforces the schema", async () => {
-    const run = vi.fn(async () => ok('{"reply":"ok"}'));
+    const run = vi.fn<(request: CompleteRequest) => Promise<CompleteResult>>(async () => ok('{"reply":"ok"}'));
     await complete(options(run));
 
     expect(run.mock.calls[0][0].system).toBe("система");
@@ -89,7 +89,7 @@ describe("complete", () => {
   });
 
   it("appends shape instructions when the provider cannot enforce a schema", async () => {
-    const run = vi.fn(async () => ok('{"reply":"ok"}'));
+    const run = vi.fn<(request: CompleteRequest) => Promise<CompleteResult>>(async () => ok('{"reply":"ok"}'));
     await complete({ ...options(run), provider: "deepseek" });
 
     expect(run.mock.calls[0][0].system).toContain("система");
@@ -98,7 +98,7 @@ describe("complete", () => {
   });
 
   it("uses a caller-supplied shape for a non-default structure", async () => {
-    const run = vi.fn(async () => ok('{"reply":"ok"}'));
+    const run = vi.fn<(request: CompleteRequest) => Promise<CompleteResult>>(async () => ok('{"reply":"ok"}'));
     await complete({ ...options(run), provider: "deepseek", shape: '{"summary": "..."}' });
 
     expect(run.mock.calls[0][0].system).toContain('{"summary": "..."}');
