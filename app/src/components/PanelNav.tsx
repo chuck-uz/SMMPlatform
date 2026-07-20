@@ -11,6 +11,7 @@ import {
   PhotoIcon,
   UsersIcon,
   UserCircleIcon,
+  BeakerIcon,
 } from "@heroicons/react/24/outline";
 
 const MODULE_NAV_ITEMS = [
@@ -23,6 +24,7 @@ const MODULE_NAV_ITEMS = [
 
 const ADMIN_NAV_ITEMS = [
   { href: "/panel/scenarios", label: "Агент", icon: ChatBubbleLeftRightIcon },
+  { href: "/panel/models", label: "Модели", icon: BeakerIcon },
   { href: "/panel/users", label: "Пользователи", icon: UsersIcon },
 ];
 const PROFILE_NAV_ITEM = { href: "/panel/profile", label: "Профиль", icon: UserCircleIcon };
