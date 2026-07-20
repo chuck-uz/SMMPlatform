@@ -33,7 +33,6 @@ function RouteRow({ route, availableProviders }: { route: RouteView; availablePr
   const [model, setModel] = useState(route.model);
   const [models, setModels] = useState<CatalogModel[]>([]);
   const [catalogError, setCatalogError] = useState<string | null>(null);
-  const [filter, setFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -60,14 +59,12 @@ function RouteRow({ route, availableProviders }: { route: RouteView; availablePr
     };
   }, [provider]);
 
-  const visibleModels = models.filter(
-    (item) =>
-      filter.trim().length === 0 ||
-      item.label.toLowerCase().includes(filter.toLowerCase()) ||
-      item.id.toLowerCase().includes(filter.toLowerCase()),
-  );
-
   const selected = models.find((item) => item.id === model);
+
+  // The stored model must stay selectable even when the catalogue does not list it (a
+  // provider outage, a model retired upstream). Otherwise the select would silently land on
+  // a different model and a save would swap it without the admin noticing.
+  const options: Array<{ id: string }> = selected || !model ? models : [{ id: model }, ...models];
 
   function handleSave() {
     if (isPending || !model.trim()) return;
@@ -128,33 +125,25 @@ function RouteRow({ route, availableProviders }: { route: RouteView; availablePr
           ))}
         </select>
 
-        <div className="min-w-0">
-          <input
-            type="text"
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-            placeholder={isLoadingCatalog ? "Загрузка моделей…" : `Поиск по ${models.length} моделям`}
-            className="w-full rounded-sm border border-border bg-background px-3 py-2 text-[13px] text-foreground placeholder:text-subtle focus:outline-none focus:ring-2 focus:ring-accent"
-          />
-          {/* Manual entry is the escape hatch when a model exists in the API but not yet
-              in the published catalogue. */}
-          <input
-            type="text"
-            value={model}
-            onChange={(event) => setModel(event.target.value)}
-            list={`models-${route.interactionType}`}
-            placeholder="ID модели"
-            disabled={isPending}
-            className="mt-2 w-full rounded-sm border border-border bg-background px-3 py-2 font-mono text-[12.5px] text-foreground placeholder:text-subtle focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60"
-          />
-          <datalist id={`models-${route.interactionType}`}>
-            {visibleModels.slice(0, 200).map((item) => (
+        <select
+          aria-label="Модель"
+          value={model}
+          onChange={(event) => setModel(event.target.value)}
+          disabled={isPending || isLoadingCatalog || options.length === 0}
+          className="min-w-0 rounded-sm border border-border bg-background px-2 py-2 font-mono text-[12.5px] text-foreground focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60"
+        >
+          {isLoadingCatalog ? (
+            <option value={model}>Загрузка моделей…</option>
+          ) : options.length === 0 ? (
+            <option value="">Моделей нет</option>
+          ) : (
+            options.map((item) => (
               <option key={item.id} value={item.id}>
-                {item.label}
+                {item.id}
               </option>
-            ))}
-          </datalist>
-        </div>
+            ))
+          )}
+        </select>
 
         <div className="flex items-start gap-2">
           <button

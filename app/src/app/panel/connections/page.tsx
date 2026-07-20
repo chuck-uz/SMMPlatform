@@ -227,8 +227,8 @@ export default async function ConnectionsPage({
           <h2 className="mt-9 text-[13.5px] font-semibold text-foreground">Модель на точку взаимодействия</h2>
           <p className="mt-1 max-w-[640px] text-[12.5px] leading-relaxed text-muted-foreground">
             Каждая точка настраивается отдельно, поэтому эксперименты с моделью для клиентов не
-            задевают внутренний AI-разбор. Список моделей подтягивается у провайдера; если нужной
-            в нём ещё нет — впишите ID вручную.
+            задевают внутренний AI-разбор. Список моделей подтягивается у провайдера; если модель
+            только что вышла и её ещё нет в списке — обновите его кнопкой ↻.
           </p>
           <div className="mt-3 max-w-[1020px]">
             <ModelRoutesForm
