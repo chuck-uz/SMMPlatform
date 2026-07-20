@@ -29,22 +29,23 @@ const SHAPE =
   '{"reply": "<текст ответа клиенту>", "fields": {"destination": null, "people": null, ' +
   '"dates": null, "budget": null, "contact": null, "wishes": null}}';
 
-export function buildStructuredOutputInstruction(mechanism: OutputMechanism): string {
+// `shape` defaults to the lead-reply object used by the agent and comment replies; the
+// analytics call site passes its own, since it expects a different structure.
+export function buildStructuredOutputInstruction(mechanism: OutputMechanism, shape: string = SHAPE): string {
   // The decoder already guarantees the shape — extra instructions would only waste tokens.
   if (mechanism === "native_schema") return "";
 
   return (
     "Отвечай ТОЛЬКО одним объектом JSON, без пояснений и без markdown-разметки. " +
-    `Форма объекта: ${SHAPE}. ` +
-    "В reply — текст, который увидит клиент. В fields — извлечённые поля заявки; " +
-    "если поле клиент не называл явно, ставь null и ничего не выдумывай."
+    `Форма объекта: ${shape}. ` +
+    "Если значение поля неизвестно, ставь null и ничего не выдумывай."
   );
 }
 
-export function buildRepairInstruction(): string {
+export function buildRepairInstruction(shape: string = SHAPE): string {
   return (
     "Предыдущий ответ не удалось разобрать. Верни СТРОГО один объект JSON указанной формы " +
-    `(${SHAPE}) — без преамбулы, без markdown и без текста после объекта. Ответ держи коротким.`
+    `(${shape}) — без преамбулы, без markdown и без текста после объекта. Ответ держи коротким.`
   );
 }
 
