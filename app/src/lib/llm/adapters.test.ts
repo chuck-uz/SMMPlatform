@@ -33,7 +33,8 @@ describe("buildAnthropicBody", () => {
   });
 
   it("omits output_config when no schema was supplied", () => {
-    const { schema: _schema, ...withoutSchema } = base;
+    const withoutSchema = { ...base };
+    delete withoutSchema.schema;
     expect(buildAnthropicBody(withoutSchema)).not.toHaveProperty("output_config");
   });
 });

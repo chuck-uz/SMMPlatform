@@ -97,17 +97,6 @@ export async function regenerateCommentReplyAction(
     return { error: "Слишком много перегенераций подряд — подождите минуту" };
   }
 
-  const encryptionKey = process.env.ENCRYPTION_KEY;
-  if (!encryptionKey) {
-    return { error: "Сервер не настроен (ENCRYPTION_KEY). Обратитесь к администратору." };
-  }
-
-  const claudeConfig = await prisma.claudeApiKeyConfig.findUnique({ where: { singleton: "claude" } });
-  if (!claudeConfig?.verified) {
-    return { error: "Ключ Claude не настроен или не проверен — подключите его на странице «Подключения»" };
-  }
-  const apiKey = decrypt(claudeConfig.encryptedApiKey, encryptionKey);
-
   const [comment, agentConfig, knowledgeDocuments] = await Promise.all([
     prisma.instagramComment.findUniqueOrThrow({ where: { id: commentId } }),
     prisma.agentConfig.findUnique({ where: { singleton: "agent" } }),
@@ -127,7 +116,7 @@ export async function regenerateCommentReplyAction(
 
   let reply: string;
   try {
-    ({ reply } = await generateCommentReply(apiKey, systemPrompt, userMessage));
+    ({ reply } = await generateCommentReply(systemPrompt, userMessage));
   } catch (error) {
     console.error(`[inbox] regenerate failed for comment ${commentId}`, error);
     return { error: "Не удалось сгенерировать ответ заново — попробуйте ещё раз" };

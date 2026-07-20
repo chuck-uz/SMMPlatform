@@ -109,12 +109,14 @@ export async function register() {
     if (!encryptionKey) return;
 
     const accounts = await prisma.instagramAccount.findMany({ include: { media: true } });
-    const claudeConfig = await prisma.claudeApiKeyConfig.findUnique({ where: { singleton: "claude" } });
     const agentConfig = await prisma.agentConfig.findUnique({ where: { singleton: "agent" } });
     const knowledgeDocuments = await prisma.agentKnowledgeDocument.findMany({
       select: { title: true, body: true },
     });
-    const canAutoReply = Boolean(claudeConfig?.verified && agentConfig);
+    // Cheap gate: without any provider credential every reply attempt would throw once per
+    // comment, every five minutes. The concrete provider is picked inside the client.
+    const configuredProviders = await prisma.llmProviderCredential.count();
+    const canAutoReply = Boolean(configuredProviders > 0 && agentConfig);
 
     for (const account of accounts) {
       try {
@@ -156,16 +158,15 @@ export async function register() {
                 continue;
               }
 
-              if (!canAutoReply || !claudeConfig || !agentConfig) continue;
+              if (!canAutoReply || !agentConfig) continue;
 
               try {
-                const apiKey = decrypt(claudeConfig.encryptedApiKey, encryptionKey);
                 const systemPrompt = buildCommentReplySystemPrompt({
                   commentToneAndRules: agentConfig.commentToneAndRules,
                   knowledgeDocuments,
                 });
                 const userMessage = buildCommentUserMessage({ text: created.text, username: created.username });
-                const { reply } = await generateCommentReply(apiKey, systemPrompt, userMessage);
+                const { reply } = await generateCommentReply(systemPrompt, userMessage);
 
                 if (agentConfig.commentModerationEnabled) {
                   await prisma.instagramComment.update({
@@ -312,8 +313,7 @@ export async function register() {
     const encryptionKey = process.env.ENCRYPTION_KEY;
     if (!encryptionKey) return;
 
-    const claudeConfig = await prisma.claudeApiKeyConfig.findUnique({ where: { singleton: "claude" } });
-    if (!claudeConfig?.verified) return;
+    if ((await prisma.llmProviderCredential.count()) === 0) return;
 
     const now = new Date();
     const from = new Date(now.getTime() - INSIGHTS_WINDOW_DAYS * 24 * 60 * 60 * 1000);
@@ -384,8 +384,7 @@ export async function register() {
         };
 
         const prompt = buildInsightsPrompt(inputs);
-        const apiKey = decrypt(claudeConfig.encryptedApiKey, encryptionKey);
-        const content = await analyzeAccountInsights(apiKey, prompt);
+        const content = await analyzeAccountInsights(prompt);
 
         await prisma.accountInsightReport.create({
           data: {
