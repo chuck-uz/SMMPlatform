@@ -1,3 +1,5 @@
+import { InstagramApiError, parseGraphError } from "./instagramApiError";
+
 const GRAPH_BASE = "https://graph.instagram.com";
 const MEDIA_FIELDS =
   "id,caption,media_type,media_product_type,permalink,timestamp,like_count,comments_count";
@@ -40,7 +42,12 @@ async function fetchJson(url: URL) {
   const res = await fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`Instagram content API request failed: ${res.status} ${url.pathname} ${body}`);
+    // Carry the parsed Graph error alongside the message so callers can tell a
+    // permanent failure from a transient one without re-parsing the log line.
+    throw new InstagramApiError(
+      `Instagram content API request failed: ${res.status} ${url.pathname} ${body}`,
+      { status: res.status, graphError: parseGraphError(body) },
+    );
   }
   return res.json();
 }
@@ -165,7 +172,10 @@ export const instagramContentClient = {
     if (!res.ok) {
       const bodyText = await res.text().catch(() => "");
       const detail = bodyText.trim().startsWith("<") ? "upstream returned an error page, not JSON" : bodyText.slice(0, 500);
-      throw new Error(`Instagram content API request failed: ${res.status} ${url.pathname} ${detail}`);
+      throw new InstagramApiError(
+        `Instagram content API request failed: ${res.status} ${url.pathname} ${detail}`,
+        { status: res.status, graphError: parseGraphError(bodyText) },
+      );
     }
     return res.json();
   },
