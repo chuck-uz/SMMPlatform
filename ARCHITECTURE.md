@@ -75,24 +75,30 @@ All application code lives in `app/src`.
 | `lib/verifyWebhookSignature.ts` | HMAC-SHA256 signature verification (`sha256=<hex>`, matching Meta's `X-Hub-Signature-256`). Built ahead of any real webhook endpoint, for the future Instagram Direct/Track B work. |
 | `lib/rateLimiter.ts` | In-memory, fixed-window rate limiter (`Map`-based, per process). Not shared across replicas — revisit if `smm` ever scales beyond one. |
 | `lib/verifyCredentials.ts`, `changePassword.ts`, `createUser.ts`, `setUserActive.ts` | Panel auth/user-management business logic, each paired with a `.test.ts`. |
-| `lib/claudeApiKey.ts` | Pure, dependency-injected logic for saving the platform's Claude API key: verifies it against the real API, then encrypts it. The verification client is injected (`ClaudeApiClient`), so this is unit-tested without a real key or network call. |
-| `lib/claudeApiClient.ts` | The real `ClaudeApiClient` implementation — calls Anthropic's `GET /v1/models` (cheap, no token cost) to check the key is valid. Not unit-tested, same boundary treatment as `instagramApiClient.ts`. |
+| `lib/llm/router.ts` | Pure resolution of an interaction point (`agent_dialog`/`comment_reply`/`analytics`) to a `{provider, model}` pair, plus `resolveCredential`. Malformed config rows (unknown provider, blank model) fall back to `DEFAULT_ROUTES` rather than taking the agent offline. Fully unit-tested. |
+| `lib/llm/structuredOutput.ts` | Pure helpers deciding **how** a given provider can be made to return a JSON object: `pickOutputMechanism` (`native_schema` / `json_mode` / `prompt`), the prompt-side instructions for models without schema support, `extractJsonObject` (brace-balanced scan that survives prose preambles and markdown fences), and `shouldRepairRetry` (exactly one repair attempt). Fully unit-tested. |
+| `lib/llm/index.ts` | `complete()` — the one entry point every call site uses. Picks the mechanism, appends shape instructions only when the decoder can't enforce them, calls the provider adapter, validates with a caller-supplied parser, and retries once with a repair instruction. Returns the mechanism, retry count, latency and token usage alongside the value. Unit-tested through an injected `run` adapter. |
+| `lib/llm/anthropic.ts`, `openAiCompatible.ts`, `openrouter.ts`, `deepseek.ts` | Provider adapters over `fetch`. Request-body builders are pure and unit-tested — `buildAnthropicBody` is asserted to reproduce the exact body the old Claude-only clients sent, which is what makes the migration a no-op until settings change. OpenRouter and DeepSeek share the OpenAI-compatible dialect. |
+| `lib/llm/catalog.ts` | Fetches and caches each provider's `/models` list (1-hour in-process TTL, manual refresh). Also the source of OpenRouter's per-model `structured_outputs` capability. |
+| `lib/llm/credentials.ts` | Pure, dependency-injected `connectProviderApiKey`: encrypts the key and records whether the provider accepted it. A failed verification is stored rather than rejected — a provider outage shouldn't block saving a good key. Fully unit-tested. |
+| `lib/llm/resolve.ts` | The DB boundary: reads the route + credential rows, decrypts the key, and resolves OpenRouter's per-model capability. Call sites no longer read keys themselves, so a settings change actually takes effect. |
+| `lib/modelComparison.ts` | Pure logic for the model comparison screen: `extractClientTurns` (only the client's lines form the replayable script), `planComparison` (turns × models = paid calls), and `summariseRun`/`summariseTarget` (per-model fields-collected, retries, failures, average latency, tokens). Fully unit-tested. |
 | `lib/instagramPoller.ts` | Pure normalization functions for the content poller: `normalizeMedia`, `normalizeComment`, `flattenInsights`, `buildMetricSnapshot`, `isActiveStory`, `normalizeFollowerCount`, `shouldFetchDemographics`, `buildDemographicsMetrics`, `dailyHistory` (groups snapshots into one-per-calendar-day, also the fallback for expired stories). Fully unit-tested against fixture Graph API payloads — no network or DB. |
 | `lib/instagramContentClient.ts` | The real Graph API calls (`graph.instagram.com/me/media`, `/{media-id}/comments`, `/me/insights`, `/{media-id}/insights`, `/me` for follower count, demographics breakdown insights, `POST /{comment-id}/replies` for CM1). Not unit-tested, same boundary treatment as `instagramApiClient.ts`. |
 | `lib/analyticsDashboard.ts` | Pure read-side functions for the analytics dashboard: `buildAccountMetricCharts`/`buildMetricSeries` (per-metric Recharts series from `dailyHistory()` output), `buildMediaTableRows` (attaches latest metric snapshot to each media row), `parseAgeGenderBreakdown`/`parseGeographyBreakdown` (unpack Meta's nested `total_value.breakdowns[].results[]` demographics shape into chart-ready bars). Fully unit-tested against fixture payloads — no network or DB, mirrors the poller/client split (`instagramPoller.ts` = write-side, this = read-side). |
 | `lib/analyticsSummary.ts` | Pure media-engagement/pattern utilities, shared by the unified AI-разбор: `buildMediaEngagements`/`rankMedia` (FEED/REELS only, top/bottom-3 by `total_interactions`), `buildWeekdayPattern`/`buildTimeOfDayPattern` (gated at 3+ samples per bucket), `detectAnomalies` (day deviates >50% from the window average, gated at 4+ data points). No longer owns period selection or metric deltas — that moved to `accountInsights.ts`. Fully unit-tested, no DB access. |
 | `lib/accountInsights.ts` | Pure functions for the unified AI-разбор (supersedes AN3/AN4/GROW1's separate `analysisReport.ts`/`growthInsights.ts`): `buildMediaFormatEngagements`/`buildFormatBreakdown` (engagement per media format, gated at 3+ samples), `buildMetricTrends` (first-half-vs-second-half split of a fixed 90-day window, generalized to **every** account metric — stock `followerCount` compared by last value per half, flow metrics by average per half — not just reach), `buildDemandSignal` (leads grouped by destination, `available: false` when empty), `buildInsightsPrompt`/`parseInsightsContent` (5-field schema: `summary`/`observations`/`gaps`/`direction`/`recommendations`), `shouldSkipManualInsights` (5-minute cooldown), `isInsightsDigestDue` (7-day gate). Fully unit-tested. |
-| `lib/claudeInsightsClient.ts` | The real call to `claude-sonnet-5` with `output_config.format` (the 5-field schema above) and a system prompt that forbids both fabrication and quoting raw JSON field names (`current`/`formatBreakdown`/`sufficientData`/etc.) in the output text. Not unit-tested, same boundary treatment as `claudeApiClient.ts`. |
+| `lib/claudeInsightsClient.ts` | The analytics call, now issued through `llm/complete()` on the model configured for `analytics` (Anthropic/Sonnet by default) with the 5-field schema and a system prompt that forbids both fabrication and quoting raw JSON field names (`current`/`formatBreakdown`/`sufficientData`/etc.) in the output text. Not unit-tested, same boundary treatment as `instagramApiClient.ts`. |
 | `lib/agentPrompt.ts` | Pure functions for the AI agent core (AG1): `buildSystemPrompt` (assembles tone/rules + knowledge base documents + example dialogues into one system prompt; the no-prices/no-closing-deals rule is always baked in, not admin-editable), `buildConversationMessages` (dialogue turns → Claude's `user`/`assistant` message array). Fully unit-tested. |
 | `lib/agentSandbox.ts` | Pure function `canSaveAsExample` (AG1): blocks saving a sandbox dialogue as a reusable example if any agent turn in it was rated 👎. Fully unit-tested. |
-| `lib/agentClient.ts` | `respondAndExtractLead` (AG1+LEAD1): one structured `POST /v1/messages` call to `claude-haiku-4-5-20251001` (`output_config.format`) that returns both the reply text and the current full snapshot of lead fields in one round trip, replacing an earlier plain-text-only version. Not unit-tested, same boundary treatment as `claudeAnalysisClient.ts`. |
+| `lib/agentClient.ts` | `respondAndExtractLead` (AG1+LEAD1): one structured call through `llm/complete()` on the model configured for `agent_dialog`, that returns both the reply text and the current full snapshot of lead fields in one round trip, replacing an earlier plain-text-only version. Not unit-tested, same boundary treatment as `instagramApiClient.ts`. |
 | `lib/leadFields.ts` | Pure functions for LEAD1: `isLeadComplete` (required: destination/people/dates/contact; optional: budget/wishes), `parseAgentReplyContent` (defensive validator for `agentClient.ts`'s structured response, mirrors `parseAnalysisContent`). Fully unit-tested. |
 | `lib/leadIntake.ts` | `saveLeadDraft(conversationId, fields, source)` (LEAD1/LEAD2): upserts a `Lead` by `conversationId`, distinguishing insert from update via an explicit `findUnique` first (an insert triggers a one-time Telegram notification; updates don't). Not unit-tested — DB + Telegram boundary, verified directly via a temporary script instead. |
 | `lib/leadNotify.ts` | Pure function `buildLeadNotificationText` (LEAD2): formats a `Lead` into the Telegram message text. Fully unit-tested. |
-| `lib/telegramBot.ts` | Pure, dependency-injected `connectTelegramBot` (LEAD2): verifies a bot token via an injected client, then encrypts it — mirrors `claudeApiKey.ts`. Fully unit-tested. |
-| `lib/telegramClient.ts` | The real Telegram Bot API calls (LEAD2): `verifyToken` (`getMe`) and `sendTelegramMessage` (`sendMessage`). Not unit-tested, same boundary treatment as `claudeApiClient.ts`. |
+| `lib/telegramBot.ts` | Pure, dependency-injected `connectTelegramBot` (LEAD2): verifies a bot token via an injected client, then encrypts it — mirrors `llm/credentials.ts`. Fully unit-tested. |
+| `lib/telegramClient.ts` | The real Telegram Bot API calls (LEAD2): `verifyToken` (`getMe`) and `sendTelegramMessage` (`sendMessage`). Not unit-tested, same boundary treatment as `instagramApiClient.ts`. |
 | `lib/commentReply.ts` | Pure functions for CM1: `buildCommentReplySystemPrompt` (no lead-collection rules, explicitly forbids naming prices or asking for contact info — the reply is a public comment, not a private dialogue), `buildCommentUserMessage`, `parseCommentReplyContent` (simpler `{reply}`-only schema than `leadFields.ts`). Fully unit-tested. |
-| `lib/commentReplyClient.ts` | `generateCommentReply` (CM1): one structured `POST /v1/messages` call to `claude-haiku-4-5-20251001`, same output-tokens-based truncation guard as `agentClient.ts`. Not unit-tested, same boundary treatment as `agentClient.ts`. |
+| `lib/commentReplyClient.ts` | `generateCommentReply` (CM1): one structured call through `llm/complete()` on the model configured for `comment_reply`. Not unit-tested, same boundary treatment as `agentClient.ts`. |
 | `lib/prisma.ts` | Prisma client singleton, constructed with the `@prisma/adapter-pg` driver adapter. |
 | `components/*` | Client components for panel interactivity (forms, toggles, nav) — thin, calling server actions via `useTransition`. |
 
@@ -105,10 +111,21 @@ Prisma models (`app/prisma/schema.prisma`):
   (`instagramUserId`, `username`, `accessToken` — encrypted, `tokenExpiresAt`,
   `connectedByUserId`). Designed for **multiple** accounts from the start, even
   though the first customer only needs one.
-- **`ClaudeApiKeyConfig`** — a singleton row (`singleton: "claude"`) holding
-  the platform's own Claude API key, encrypted, plus `verified`/`verifiedAt`.
-  Global rather than per-user: the key powers server-side AI features (analytics,
-  content, auto-replies), not a per-account external login like Instagram.
+- **`LlmProviderCredential`** — one row per provider (`anthropic`,
+  `openrouter`, `deepseek`) holding that provider's API key, encrypted, plus
+  `verified`/`verifiedAt`. Global rather than per-user: these keys power
+  server-side AI features, not a per-account external login like Instagram.
+  Replaced the earlier Claude-only `ClaudeApiKeyConfig` singleton, whose row was
+  migrated into the `anthropic` credential.
+- **`LlmRouteConfig`** — one row per interaction point (`agent_dialog`,
+  `comment_reply`, `analytics`) pointing at a `{provider, model}`. Seeded to the
+  pre-existing behaviour (Haiku/Haiku/Sonnet on Anthropic), so switching to the
+  model layer changed nothing until an admin edits a row. Analytics is a separate
+  row on purpose: experimenting with the client-facing model must not disturb the
+  weekly AI report.
+- **`ModelComparisonRun`** / **`ModelComparisonResult`** — an append-only record
+  of comparison runs: the replayed client script plus, per model and per turn, the
+  reply, extracted lead fields, output mechanism, retries, latency and tokens.
 - **`InstagramMedia`** / **`InstagramComment`** — one row per post/Reel/story
   and per comment, deduped by their Instagram ID. Current-state
   entities, not history — engagement counts are overwritten on each poll.
@@ -156,7 +173,7 @@ Prisma models (`app/prisma/schema.prisma`):
   `site`) records which channel it came from.
 - **`TelegramBotConfig`** — a singleton row (`singleton: "telegram"`) holding
   the notification bot's token, encrypted, plus `verified`/`verifiedAt` —
-  same shape as `ClaudeApiKeyConfig`.
+  same shape as `LlmProviderCredential`.
 - **`TelegramNotificationRecipient`** — a manually-entered whitelist of
   `chatId`s (+ optional `label`) that get a message on every new `Lead`.
 - **`AccountInsightReport`** — append-only, one row per AI-разбор run

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    color: #1a2233; font-size: 11pt; line-height: 1.5; margin: 0;
+  }
+  h1 { font-size: 20pt; margin: 0 0 2mm; color: #0f172a; }
+  .sub { color: #64748b; font-size: 10pt; margin: 0 0 6mm; }
+  h2 {
+    font-size: 12.5pt; margin: 7mm 0 2.5mm; color: #0f172a;
+    border-bottom: 2px solid #16a34a; padding-bottom: 1.5mm;
+  }
+  .lead {
+    background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px;
+    padding: 3mm 4mm; font-size: 10pt; color: #14532d; margin: 0 0 5mm;
+  }
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { margin: 1.8mm 0; padding-left: 8mm; position: relative; }
+  li::before {
+    content: "☐"; position: absolute; left: 0; top: -0.3mm;
+    font-size: 13pt; color: #16a34a;
+  }
+  li .h { font-weight: 600; }
+  .note { color: #64748b; font-size: 9.5pt; }
+  .warn {
+    background: #fff7ed; border: 1px solid #fed7aa; border-radius: 6px;
+    padding: 3mm 4mm; font-size: 9.5pt; color: #7c2d12; margin: 3mm 0 0;
+  }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0; font-size: 9.5pt; }
+  th, td { border: 1px solid #e2e8f0; padding: 2mm 3mm; text-align: left; vertical-align: top; }
+  th { background: #f8fafc; color: #334155; font-weight: 600; }
+  .foot { margin-top: 7mm; font-size: 8.5pt; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 2.5mm; }
+  code { background: #f1f5f9; padding: 0.5mm 1.5mm; border-radius: 3px; font-size: 9pt; }
+</style>
+</head>
+<body>
+  <h1>Meta Business Verification — чек-лист</h1>
+  <p class="sub">Для ООО · Узбекистан · приложение SMMPLATFORM (Instagram API with Instagram Login) · 17.07.2026</p>
+
+  <div class="lead">
+    <b>Зачем:</b> верификация компании разблокирует <b>Advanced Access</b> на комментарии
+    (<code>instagram_business_manage_comments</code>) → перевод приложения в <b>Live</b> →
+    заработают автоответы на комментарии (CM1/CM2) и, далее, директ. В Development-режиме Instagram
+    комментарии приложению не отдаёт — проверено. Цепочка: <b>Business Verification → Access verification → App Review → Live</b>.
+  </div>
+
+  <h2>1. Документы компании (сканы цветные, читаемые, не просрочены)</h2>
+  <ul>
+    <li><span class="h">Регистрация ООО</span> — выписка из ЕГРПО / свидетельство о госрегистрации
+      <span class="note">(с полным юридическим названием и адресом)</span></li>
+    <li><span class="h">СТИР (ИНН)</span> компании — документ, где виден налоговый идентификатор</li>
+    <li><span class="h">Подтверждение адреса</span> — счёт за коммуналку/аренду или банковская выписка
+      на имя компании, <span class="note">не старше ~90 дней, с адресом</span></li>
+    <li><span class="h">Удостоверение личности владельцев</span> — паспорт РУз или ID-карта (обе стороны)
+      для <b>всех бенефициаров с долей ≥ 10%</b></li>
+  </ul>
+  <div class="warn"><b>ID владельца — обязательная часть KYC Meta.</b> Без него верификацию не пройти.</div>
+
+  <h2>2. Контакты компании для подтверждения владения</h2>
+  <ul>
+    <li><span class="h">Рабочий телефон компании</span> — Meta пришлёт код подтверждения</li>
+    <li><span class="h">Корпоративная почта на домене</span> и/или подтверждение домена
+      <span class="note">(домен oresh.in уже на Cloudflare — управляемо)</span></li>
+  </ul>
+
+  <h2>3. Согласованность данных — критично</h2>
+  <ul>
+    <li>Юр. название, адрес и телефон в <span class="h">Business Manager</span> должны <b>точно совпадать</b>
+      с документами и публичными реестрами (ЕГРПО и сторонние базы)</li>
+    <li>Единая транслитерация (кириллица/латиница), без сокращений; адрес — полностью как в регистрации</li>
+  </ul>
+  <div class="warn">Несовпадение названия/адреса — <b>самая частая причина отказа</b>. Также отклоняют
+    просроченные, нечитаемые или неполные документы.</div>
+
+  <h2>4. Подача в Meta (порядок)</h2>
+  <ul>
+    <li>Создать/открыть <span class="h">Business Portfolio</span> (Business Manager)</li>
+    <li>Внести юр. название / адрес / телефон / сайт <b>строго как в документах</b></li>
+    <li>Подать: <span class="h">Business Settings → Security Center → Business Verification</span>
+      <span class="note">(или из вкладки «Публикация» приложения — кнопка «Начать подтверждение компании»)</span></li>
+    <li>Загрузить документы, подтвердить телефон/почту/домен</li>
+    <li>Дождаться результата <span class="note">(обычно несколько рабочих дней, ответ на почту)</span></li>
+    <li>После компании: пройти <span class="h">Access verification</span> (поставщик тех. услуг)</li>
+    <li>Затем <span class="h">App Review</span> сценария «Управление комментариями и контентом» → <b>Live</b></li>
+  </ul>
+
+  <h2>5. Связь с roadmap (трек «Верификация»)</h2>
+  <table>
+    <tr><th>ID</th><th>Задача</th><th>Готово, когда</th></tr>
+    <tr><td>BV1</td><td>Регистрационные документы ООО</td><td>сканы госрегистрации + СТИР с юр. названием и адресом</td></tr>
+    <tr><td>BV2</td><td>Адрес + ID владельцев</td><td>документ адреса и ID всех бенефициаров ≥10%</td></tr>
+    <tr><td>BV3</td><td>Business Portfolio</td><td>данные в Business Manager совпадают с документами/реестром</td></tr>
+    <tr><td>BV4</td><td>Пройти Business Verification</td><td>статус компании = «Подтверждено»</td></tr>
+    <tr><td>BV5</td><td>Access verification</td><td>подтверждение прав доступа одобрено</td></tr>
+    <tr><td>BV6</td><td>App Review → Live</td><td>app в Live с Advanced Access → CM1/CM2 разблокированы</td></tr>
+  </table>
+
+  <div class="foot">
+    Заметки: документы на русском/узбекском обычно принимают (при запросе — перевод на английский).
+    Сервер в РФ на верификацию компании напрямую не влияет, но данные должны биться с реестрами.<br>
+    Источники: facebook.com/business/help/193400874040813 · /159334372093366 · /1095661473946872
+  </div>
+</body>
+</html>
