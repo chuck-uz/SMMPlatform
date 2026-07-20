@@ -52,6 +52,19 @@ export interface CompleteOutcome<T> {
   outputTokens?: number;
 }
 
+// Carries how many repair attempts were spent before giving up. Without this the caller
+// cannot tell an instant refusal from a model that burned two calls and still failed —
+// and the comparison screen would report a failing model as costing nothing.
+export class LlmCompletionError extends Error {
+  readonly retries: number;
+
+  constructor(message: string, retries: number) {
+    super(message);
+    this.name = "LlmCompletionError";
+    this.retries = retries;
+  }
+}
+
 export async function complete<T>(options: CompleteOptions<T>): Promise<CompleteOutcome<T>> {
   const mechanism = pickOutputMechanism({
     provider: options.provider,
@@ -64,8 +77,10 @@ export async function complete<T>(options: CompleteOptions<T>): Promise<Complete
 
   const startedAt = Date.now();
   let failure = "";
+  let attemptsMade = 0;
 
   for (let attempt = 0; attempt <= 1; attempt++) {
+    attemptsMade = attempt + 1;
     const system = attempt === 0 ? baseSystem : `${baseSystem}\n\n${buildRepairInstruction(options.shape)}`;
 
     const result = await run({
@@ -99,7 +114,7 @@ export async function complete<T>(options: CompleteOptions<T>): Promise<Complete
     if (!shouldRepairRetry({ attempt, parsed, truncated: result.truncated })) break;
   }
 
-  throw new Error(`Модель ${options.model} (${options.provider}): ${failure}`);
+  throw new LlmCompletionError(`Модель ${options.model} (${options.provider}): ${failure}`, attemptsMade - 1);
 }
 
 export * from "./router";

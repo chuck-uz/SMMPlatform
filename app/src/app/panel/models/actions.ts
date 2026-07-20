@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { respondAndExtractLead } from "@/lib/agentClient";
 import { buildCurrentAgentSystemPrompt } from "@/lib/currentAgentPrompt";
+import { LlmCompletionError } from "@/lib/llm";
 import { isSupportedProvider } from "@/lib/llm/router";
 import type { ComparisonResultRow, ComparisonTarget } from "@/lib/modelComparison";
 
@@ -75,7 +76,8 @@ export async function runModelComparisonAction(params: {
           reply: null,
           fields: null,
           mechanism: "—",
-          retries: 0,
+          // A failed turn still cost calls; reporting 0 here would make a weak model look free.
+          retries: error instanceof LlmCompletionError ? error.retries : 0,
           latencyMs: 0,
           inputTokens: null,
           outputTokens: null,
