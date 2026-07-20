@@ -9,7 +9,7 @@ import { connectTelegramBot } from "@/lib/telegramBot";
 import { telegramBotClient, sendTelegramMessage } from "@/lib/telegramClient";
 import { encrypt, decrypt } from "@/lib/encryption";
 import { instagramContentClient } from "@/lib/instagramContentClient";
-import { diagnoseInstagramRead } from "@/lib/instagramReadDiagnostic";
+import { diagnoseInstagramRead, pickProbeMedia } from "@/lib/instagramReadDiagnostic";
 
 async function requireAdmin() {
   const session = await auth();
@@ -182,11 +182,13 @@ export async function runInstagramReadDiagnosticAction(
 
   try {
     const media = await instagramContentClient.listMedia({ accessToken });
-    const newestComments =
-      media.length > 0
-        ? await instagramContentClient.listComments({ accessToken, mediaId: media[0].id })
-        : null;
-    const diagnosis = diagnoseInstagramRead({ media, newestComments });
+    // Probe the newest post that actually has comments, so a comment-less latest
+    // post doesn't make the check inconclusive.
+    const probeMedia = pickProbeMedia(media);
+    const probeComments = probeMedia
+      ? await instagramContentClient.listComments({ accessToken, mediaId: probeMedia.id })
+      : null;
+    const diagnosis = diagnoseInstagramRead({ mediaCount: media.length, probeMedia, probeComments });
     return { ok: true, username: account.username, ...diagnosis };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
