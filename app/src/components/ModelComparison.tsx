@@ -184,7 +184,17 @@ export function ModelComparison({
         )}
 
         {/* Catalogues run to hundreds of models, so arbitrary ones are typed in rather than
-            listed as chips. */}
+            listed as chips. With no provider key there is nothing to add against, and an
+            empty provider dropdown just reads as broken. */}
+        {availableProviders.length === 0 ? (
+          <p className="mt-3 text-[12.5px] text-subtle">
+            Чтобы добавить другую модель, сначала подключите провайдера в{" "}
+            <a href="/panel/connections" className="underline underline-offset-2 hover:text-foreground">
+              «Подключениях»
+            </a>
+            .
+          </p>
+        ) : (
         <div className="mt-3 flex flex-wrap gap-2">
           <select
             aria-label="Провайдер новой модели"
@@ -214,6 +224,7 @@ export function ModelComparison({
             Добавить
           </button>
         </div>
+        )}
       </section>
 
       <section className="rounded-[14px] border border-border bg-card p-5 shadow-card">
