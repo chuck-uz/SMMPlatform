@@ -1,8 +1,12 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 import type { Page } from "@playwright/test";
+import { PrismaClient } from "../src/generated/prisma/client";
 
 // Отдельный клиент для тестов — пишет в ту же БД, что и приложение под тестом.
-export const prisma = new PrismaClient();
+// Prisma 7: клиент генерируется в src/generated и работает через pg-адаптер
+// (как в src/lib/prisma.ts), а не импортируется из "@prisma/client".
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+export const prisma = new PrismaClient({ adapter });
 
 const EMAIL = process.env.E2E_EMAIL ?? "admin@example.com";
 const PASSWORD = process.env.E2E_PASSWORD ?? "";
