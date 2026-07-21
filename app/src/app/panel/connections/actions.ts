@@ -11,6 +11,7 @@ import { connectTelegramBot } from "@/lib/telegramBot";
 import { telegramBotClient, sendTelegramMessage } from "@/lib/telegramClient";
 import { encrypt, decrypt } from "@/lib/encryption";
 import { instagramContentClient } from "@/lib/instagramContentClient";
+import { syncAccountMedia } from "@/lib/instagramMediaSync";
 import { diagnoseInstagramRead, pickProbeMedia } from "@/lib/instagramReadDiagnostic";
 
 async function requireAdmin() {
@@ -268,4 +269,34 @@ export async function runInstagramReadDiagnosticAction(
     console.error(`[ig-read-diagnostic] account ${accountId} failed at ${stage} stage`, error);
     return { ok: false, stage, error: message };
   }
+}
+
+export type RefreshMediaResult = { upserted: number; deleted: number };
+
+// On-demand version of the 15-minute media poll for one account, so an admin who just
+// deleted or edited a post on Instagram doesn't have to wait a full cycle. Same reconcile
+// path as the poller (syncAccountMedia), so a manual refresh and an automatic one converge
+// to the same state.
+export async function refreshAccountMediaAction(accountId: string): Promise<RefreshMediaResult> {
+  await requireAdmin();
+
+  const encryptionKey = process.env.ENCRYPTION_KEY;
+  if (!encryptionKey) {
+    throw new Error("ENCRYPTION_KEY не настроен на сервере");
+  }
+
+  const account = await prisma.instagramAccount.findUnique({ where: { id: accountId } });
+  if (!account) {
+    throw new Error("Аккаунт не найден");
+  }
+
+  const result = await syncAccountMedia(account, encryptionKey);
+
+  // Every surface that reads posts: the connections post-count, the analytics dashboard,
+  // and the content grid.
+  revalidatePath("/panel/connections");
+  revalidatePath("/panel/analytics");
+  revalidatePath("/panel/content");
+
+  return result;
 }

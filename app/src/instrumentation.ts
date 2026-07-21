@@ -17,8 +17,8 @@ export async function register() {
   const { refreshAccountToken, daysUntilExpiry } = await import("@/lib/instagramOAuth");
   const { instagramApiClient } = await import("@/lib/instagramApiClient");
   const { instagramContentClient } = await import("@/lib/instagramContentClient");
+  const { syncAccountMedia } = await import("@/lib/instagramMediaSync");
   const {
-    normalizeMedia,
     normalizeComment,
     flattenInsights,
     buildMetricSnapshot,
@@ -83,22 +83,7 @@ export async function register() {
 
     for (const account of accounts) {
       try {
-        const accessToken = decrypt(account.accessToken, encryptionKey);
-        const rawMedia = await instagramContentClient.listMedia({ accessToken });
-
-        for (const raw of rawMedia) {
-          const media = normalizeMedia(raw, account.id);
-          await prisma.instagramMedia.upsert({
-            where: { instagramMediaId: media.instagramMediaId },
-            create: media,
-            update: {
-              likeCount: media.likeCount,
-              commentsCount: media.commentsCount,
-              caption: media.caption,
-              permalink: media.permalink,
-            },
-          });
-        }
+        await syncAccountMedia(account, encryptionKey);
       } catch (error) {
         console.error(`[instagram-media-poll] failed for account ${account.id}`, error);
       }

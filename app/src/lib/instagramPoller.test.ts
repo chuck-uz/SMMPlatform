@@ -9,6 +9,7 @@ import {
   shouldFetchDemographics,
   buildDemographicsMetrics,
   dailyHistory,
+  selectDeletedMediaIds,
 } from "./instagramPoller";
 
 describe("normalizeMedia", () => {
@@ -209,5 +210,54 @@ describe("isActiveStory", () => {
   it("is false for non-story media regardless of age", () => {
     const media = { mediaProductType: "FEED", postedAt: new Date("2026-07-10T10:00:00Z") };
     expect(isActiveStory(media, now)).toBe(false);
+  });
+});
+
+describe("selectDeletedMediaIds", () => {
+  const at = (iso: string) => new Date(iso);
+  const stored = [
+    { instagramMediaId: "a", postedAt: at("2026-07-10T00:00:00Z") },
+    { instagramMediaId: "b", postedAt: at("2026-07-09T00:00:00Z") },
+    { instagramMediaId: "c", postedAt: at("2026-07-08T00:00:00Z") },
+  ];
+
+  it("returns a stored post that Meta no longer lists, within the returned window", () => {
+    // Meta returned a and c; b sits between them in time, so it is inside the window
+    // and its absence means it was deleted.
+    const returned = [
+      { instagramMediaId: "a", postedAt: at("2026-07-10T00:00:00Z") },
+      { instagramMediaId: "c", postedAt: at("2026-07-08T00:00:00Z") },
+    ];
+    expect(selectDeletedMediaIds({ storedMedia: stored, returnedMedia: returned })).toEqual(["b"]);
+  });
+
+  it("never deletes a post older than the oldest one Meta returned (beyond the page cap)", () => {
+    // Meta only returned a and b — c is older than the oldest returned (b) and may simply
+    // be past the pagination cap, not deleted. It must be left alone.
+    const returned = [
+      { instagramMediaId: "a", postedAt: at("2026-07-10T00:00:00Z") },
+      { instagramMediaId: "b", postedAt: at("2026-07-09T00:00:00Z") },
+    ];
+    expect(selectDeletedMediaIds({ storedMedia: stored, returnedMedia: returned })).toEqual([]);
+  });
+
+  it("returns nothing when every stored post is still listed", () => {
+    const returned = stored.map((m) => ({ ...m }));
+    expect(selectDeletedMediaIds({ storedMedia: stored, returnedMedia: returned })).toEqual([]);
+  });
+
+  it("returns nothing on an empty response — a transient hiccup must not wipe history", () => {
+    expect(selectDeletedMediaIds({ storedMedia: stored, returnedMedia: [] })).toEqual([]);
+  });
+
+  it("deletes a post at the exact oldest-returned boundary", () => {
+    // A stored post posted at the same instant as the oldest returned post, but absent
+    // from the response, is inside the window (>=) and counts as deleted.
+    const returned = [{ instagramMediaId: "a", postedAt: at("2026-07-08T00:00:00Z") }];
+    const storedPair = [
+      { instagramMediaId: "a", postedAt: at("2026-07-08T00:00:00Z") },
+      { instagramMediaId: "d", postedAt: at("2026-07-08T00:00:00Z") },
+    ];
+    expect(selectDeletedMediaIds({ storedMedia: storedPair, returnedMedia: returned })).toEqual(["d"]);
   });
 });

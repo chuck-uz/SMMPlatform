@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { daysUntilExpiry } from "@/lib/instagramOAuth";
 import { DisconnectInstagramButton } from "@/components/DisconnectInstagramButton";
 import { InstagramReadDiagnosticButton } from "@/components/InstagramReadDiagnosticButton";
+import { RefreshMediaButton } from "@/components/RefreshMediaButton";
 import { ProviderKeysForm } from "@/components/ProviderKeysForm";
 import { ModelRoutesForm } from "@/components/ModelRoutesForm";
 import { INTERACTION_TYPES, resolveRoute } from "@/lib/llm/router";
@@ -202,7 +203,8 @@ export default async function ConnectionsPage({
                     </div>
                   )}
                   {isAdmin && (
-                    <div className="px-[22px] pb-4">
+                    <div className="flex flex-wrap items-start gap-2 px-[22px] pb-4">
+                      <RefreshMediaButton accountId={account.id} />
                       <InstagramReadDiagnosticButton accountId={account.id} />
                     </div>
                   )}
