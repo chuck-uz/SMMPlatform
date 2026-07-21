@@ -24,6 +24,26 @@ interface RawBreakdownInsights {
   data?: unknown[];
 }
 
+// Which stored posts has Meta stopped returning, i.e. were deleted on Instagram? We only
+// judge posts inside the window we actually saw: anything older than the oldest returned
+// post may simply be past the pagination cap, not deleted. An empty response is treated as
+// "saw nothing" (a transient API hiccup) rather than "everything is gone", so history is
+// never mass-wiped on one flaky call.
+export function selectDeletedMediaIds(params: {
+  storedMedia: Array<{ instagramMediaId: string; postedAt: Date }>;
+  returnedMedia: Array<{ instagramMediaId: string; postedAt: Date }>;
+}): string[] {
+  const { storedMedia, returnedMedia } = params;
+  if (returnedMedia.length === 0) return [];
+
+  const returnedIds = new Set(returnedMedia.map((m) => m.instagramMediaId));
+  const oldestReturned = Math.min(...returnedMedia.map((m) => m.postedAt.getTime()));
+
+  return storedMedia
+    .filter((m) => m.postedAt.getTime() >= oldestReturned && !returnedIds.has(m.instagramMediaId))
+    .map((m) => m.instagramMediaId);
+}
+
 export function normalizeMedia(raw: RawMedia, accountId: string) {
   return {
     instagramMediaId: String(raw.id),
