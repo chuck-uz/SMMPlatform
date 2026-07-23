@@ -1,7 +1,7 @@
 // Resolves "which model answers this kind of interaction" from the admin's configuration,
 // falling back to the behaviour the app had before the model layer existed.
 
-export const INTERACTION_TYPES = ["agent_dialog", "comment_reply", "analytics"] as const;
+export const INTERACTION_TYPES = ["agent_dialog", "comment_reply", "analytics", "content_plan"] as const;
 export type InteractionType = (typeof INTERACTION_TYPES)[number];
 
 export const SUPPORTED_PROVIDERS = ["anthropic", "openrouter", "deepseek"] as const;
@@ -16,12 +16,14 @@ export const DEFAULT_ROUTES: Record<InteractionType, RouteTarget> = {
   agent_dialog: { provider: "anthropic", model: "claude-haiku-4-5-20251001" },
   comment_reply: { provider: "anthropic", model: "claude-haiku-4-5-20251001" },
   analytics: { provider: "anthropic", model: "claude-sonnet-5" },
+  content_plan: { provider: "anthropic", model: "claude-sonnet-5" },
 };
 
 export const INTERACTION_LABELS: Record<InteractionType, string> = {
   agent_dialog: "Диалог агента",
   comment_reply: "Автоответы на комментарии",
   analytics: "AI-разбор аналитики",
+  content_plan: "Контент-план (AI)",
 };
 
 export const PROVIDER_LABELS: Record<Provider, string> = {
