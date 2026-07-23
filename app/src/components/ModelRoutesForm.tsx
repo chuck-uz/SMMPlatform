@@ -19,6 +19,7 @@ const INTERACTION_LABELS: Record<string, { title: string; hint: string }> = {
   agent_dialog: { title: "Диалог агента", hint: "Общение с клиентом и сбор заявки" },
   comment_reply: { title: "Автоответы на комментарии", hint: "Короткие публичные ответы" },
   analytics: { title: "AI-разбор аналитики", hint: "Внутренний отчёт, не виден клиентам" },
+  content_plan: { title: "Контент-план (AI)", hint: "Стратегия и план публикаций" },
 };
 
 const PROVIDER_LABELS: Record<string, string> = {

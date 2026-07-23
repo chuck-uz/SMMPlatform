@@ -11,7 +11,7 @@ import {
 
 describe("catalogue of supported values", () => {
   it("recognises the three interaction points", () => {
-    expect(INTERACTION_TYPES).toEqual(["agent_dialog", "comment_reply", "analytics"]);
+    expect(INTERACTION_TYPES).toEqual(["agent_dialog", "comment_reply", "analytics", "content_plan"]);
     expect(isInteractionType("agent_dialog")).toBe(true);
     expect(isInteractionType("nonsense")).toBe(false);
   });
@@ -28,6 +28,7 @@ describe("catalogue of supported values", () => {
     expect(DEFAULT_ROUTES.agent_dialog).toEqual({ provider: "anthropic", model: "claude-haiku-4-5-20251001" });
     expect(DEFAULT_ROUTES.comment_reply).toEqual({ provider: "anthropic", model: "claude-haiku-4-5-20251001" });
     expect(DEFAULT_ROUTES.analytics).toEqual({ provider: "anthropic", model: "claude-sonnet-5" });
+    expect(DEFAULT_ROUTES.content_plan).toEqual({ provider: "anthropic", model: "claude-sonnet-5" });
   });
 });
 
