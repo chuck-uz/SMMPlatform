@@ -5,6 +5,7 @@ import { auth, signOut } from "@/auth";
 import { PanelNav } from "@/components/PanelNav";
 import { PanelHeader } from "@/components/PanelHeader";
 import { prisma } from "@/lib/prisma";
+import { getSiteUrl } from "@/lib/publicSite";
 
 export default async function PanelLayout({
   children,
@@ -80,7 +81,7 @@ export default async function PanelLayout({
           />
         </nav>
 
-        <PanelHeader />
+        <PanelHeader host={getSiteUrl()?.host} />
 
         <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">{children}</main>
       </div>

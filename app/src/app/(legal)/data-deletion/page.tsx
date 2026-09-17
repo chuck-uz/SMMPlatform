@@ -1,11 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ContactEmail } from "../ContactEmail";
 
 export const metadata: Metadata = {
   title: "Удаление данных — платформа турагентства",
   description:
     "Как удалить данные, обрабатываемые платформой продвижения турагентства.",
 };
+
+// Contact email and site address come from runtime env (CONTACT_EMAIL,
+// NEXTAUTH_URL), so render per request instead of baking them in at build.
+export const dynamic = "force-dynamic";
 
 const UPDATED_AT = "15 июля 2026 года";
 
@@ -35,10 +40,8 @@ export default function DataDeletionPage() {
           </li>
           <li>
             <strong>По письму:</strong> отправьте запрос с темой «Удаление
-            данных» на{" "}
-            <a href="mailto:owner@example.com" className="underline">
-              owner@example.com
-            </a>
+            данных»{" "}
+            <ContactEmail />
             . Мы удалим данные в течение 30 дней и подтвердим удаление ответным
             письмом.
           </li>
@@ -57,10 +60,8 @@ export default function DataDeletionPage() {
         <p>
           Если вы оставляли комментарий под публикацией турагентства или
           обращались в переписку и хотите удалить эти данные с платформы,
-          напишите на{" "}
-          <a href="mailto:owner@example.com" className="underline">
-            owner@example.com
-          </a>{" "}
+          напишите{" "}
+          <ContactEmail />{" "}
           с указанием вашего имени пользователя Instagram. Мы удалим записи в
           течение 30 дней.
         </p>

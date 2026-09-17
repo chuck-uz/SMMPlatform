@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ContactEmail } from "../ContactEmail";
+import { SiteAddress } from "../SiteAddress";
 
 export const metadata: Metadata = {
   title: "Политика конфиденциальности — платформа турагентства",
   description:
     "Какие данные обрабатывает платформа продвижения турагентства и как они защищены.",
 };
+
+// Contact email and site address come from runtime env (CONTACT_EMAIL,
+// NEXTAUTH_URL), so render per request instead of baking them in at build.
+export const dynamic = "force-dynamic";
 
 const UPDATED_AT = "15 июля 2026 года";
 
@@ -24,16 +30,11 @@ export default function PrivacyPage() {
       <section className="space-y-3 text-sm leading-6 text-foreground">
         <h2 className="font-semibold text-lg">1. Кто мы</h2>
         <p>
-          Платформа по адресу{" "}
-          <a href="https://smm.example.com/" className="underline">
-            smm.example.com
-          </a>{" "}
+          <SiteAddress />{" "}
           — внутренний инструмент турагентства для продвижения его собственного
           Instagram-аккаунта и обработки заявок клиентов. Оператор данных —
           турагентство. Контакт по вопросам данных:{" "}
-          <a href="mailto:owner@example.com" className="underline">
-            owner@example.com
-          </a>
+          <ContactEmail lead="" />
           .
         </p>
       </section>
@@ -120,10 +121,8 @@ export default function PrivacyPage() {
         <h2 className="font-semibold text-lg">7. Ваши права</h2>
         <p>
           Вы можете запросить сведения о ваших данных, их исправление или
-          удаление, написав на{" "}
-          <a href="mailto:owner@example.com" className="underline">
-            owner@example.com
-          </a>
+          удаление, написав{" "}
+          <ContactEmail />
           . Мы ответим в течение 30 дней.
         </p>
       </section>

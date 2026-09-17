@@ -13,7 +13,7 @@ const TITLES: Record<string, string> = {
   profile: "Профиль",
 };
 
-export function PanelHeader() {
+export function PanelHeader({ host }: { host?: string | null }) {
   const pathname = usePathname();
   const segment = pathname.split("/")[2] ?? "connections";
   const title = TITLES[segment] ?? segment;
@@ -21,8 +21,12 @@ export function PanelHeader() {
   return (
     <div className="border-b border-border bg-card px-6 py-5 sm:px-10">
       <div className="mb-1.5 flex items-center gap-1.5 text-[12.5px] text-subtle">
-        <span>smm.example.com</span>
-        <span>/</span>
+        {host ? (
+          <>
+            <span>{host}</span>
+            <span>/</span>
+          </>
+        ) : null}
         <span>panel</span>
         <span>/</span>
         <span className="text-muted-foreground">{segment}</span>

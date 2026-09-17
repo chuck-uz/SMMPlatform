@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ContactEmail } from "../ContactEmail";
+import { SiteAddress } from "../SiteAddress";
 
 export const metadata: Metadata = {
   title: "Пользовательское соглашение — платформа турагентства",
   description:
     "Условия использования платформы продвижения турагентства.",
 };
+
+// Contact email and site address come from runtime env (CONTACT_EMAIL,
+// NEXTAUTH_URL), so render per request instead of baking them in at build.
+export const dynamic = "force-dynamic";
 
 const UPDATED_AT = "15 июля 2026 года";
 
@@ -24,10 +30,7 @@ export default function TermsPage() {
       <section className="space-y-3 text-sm leading-6 text-foreground">
         <h2 className="font-semibold text-lg">1. О сервисе</h2>
         <p>
-          Платформа по адресу{" "}
-          <a href="https://smm.example.com/" className="underline">
-            smm.example.com
-          </a>{" "}
+          <SiteAddress />{" "}
           — внутренний инструмент турагентства для продвижения его
           Instagram-аккаунта, аналитики и обработки заявок. Сервис не является
           публичным продуктом: доступ к панели управления предоставляется
@@ -81,9 +84,7 @@ export default function TermsPage() {
         <h2 className="font-semibold text-lg">5. Контакты</h2>
         <p>
           Вопросы по работе сервиса и настоящему соглашению:{" "}
-          <a href="mailto:owner@example.com" className="underline">
-            owner@example.com
-          </a>
+          <ContactEmail lead="" />
           .
         </p>
       </section>

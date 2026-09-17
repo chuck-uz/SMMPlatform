@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// Prod runs on smm.example.com; local docker compose serves on :3001 (см. README).
+// Prod URL is supplied via E2E_BASE_URL; local docker compose serves on :3001 (см. README).
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3001";
 
 export default defineConfig({

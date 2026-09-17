@@ -1,10 +1,17 @@
 import Link from "next/link";
+import { getContactEmail } from "@/lib/publicSite";
+
+// Contact email and site address come from runtime env (CONTACT_EMAIL,
+// NEXTAUTH_URL), so render per request instead of baking them in at build.
+export const dynamic = "force-dynamic";
 
 export default function LegalLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const contactEmail = getContactEmail();
+
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <header className="border-b border-border bg-card">
@@ -36,12 +43,11 @@ export default function LegalLayout({
           <Link href="/terms" className="hover:text-foreground">
             Пользовательское соглашение
           </Link>
-          <a
-            href="mailto:owner@example.com"
-            className="hover:text-foreground"
-          >
-            owner@example.com
-          </a>
+          {contactEmail ? (
+            <a href={`mailto:${contactEmail}`} className="hover:text-foreground">
+              {contactEmail}
+            </a>
+          ) : null}
         </div>
       </footer>
     </div>

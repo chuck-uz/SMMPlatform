@@ -1,4 +1,8 @@
 import type { MetadataRoute } from "next";
+import { getSiteUrl } from "@/lib/publicSite";
+
+// Host comes from NEXTAUTH_URL at request time, not from source or build env.
+export const dynamic = "force-dynamic";
 
 // Public legal pages (privacy, data-deletion, terms) must stay crawlable so
 // Meta's URL validators and link previewers can reach them; the panel and API
@@ -6,6 +10,7 @@ import type { MetadataRoute } from "next";
 // URL and treats a missing/ambiguous file as a block, so facebookexternalhit
 // and facebookcatalog are allowlisted by name in addition to the wildcard.
 export default function robots(): MetadataRoute.Robots {
+  const site = getSiteUrl();
   return {
     rules: [
       {
@@ -22,6 +27,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ["/panel/", "/api/"],
       },
     ],
-    host: "https://smm.example.com",
+    ...(site ? { host: site.origin } : {}),
   };
 }
