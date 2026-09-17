@@ -108,8 +108,11 @@ same call, or prefer the DockHost dashboard's container-edit screen instead.
 
 Required env vars for `smm` in production: `DATABASE_URL`, `NEXTAUTH_URL`,
 `NEXTAUTH_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ENCRYPTION_KEY`,
-`IG_APP_ID`, `IG_APP_SECRET`, `IG_REDIRECT_URI`. See `app/.env.example` for
-what each one is for.
+`IG_APP_ID`, `IG_APP_SECRET`, `IG_REDIRECT_URI`; optional `CONTACT_EMAIL`
+(public contact on the legal pages). See `app/.env.example` for what each one
+is for. The uptime workflow reads the prod URL from the repository variable
+`SMM_URL` (Settings → Secrets and variables → Actions → Variables) and skips
+the check when it is unset.
 
 ## Working with the vault
 
@@ -124,7 +127,7 @@ available, get it connected first rather than working around it.
 - `MASTER-CONTEXT.md` — the single source of truth: concept, decisions,
   constraints, modules, the full roadmap narrative.
 - `roadmap.json` — tasks and statuses; also read directly by the roadmap
-  site (`roadmap-platform.example.com`).
+  site (repo `chuck-uz/site-roadmap-`).
 - `context/` — working notes per module (what's known, how it's built, open
   questions). Read the relevant one before starting a task. Template:
   `context/_template.md`.

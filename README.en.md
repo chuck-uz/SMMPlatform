@@ -25,7 +25,7 @@ Two core points: **(1)** consultation and lead capture, **(2)** promotion and ac
 - **"Заявки" (Leads) section** — cards for every collected lead with a status (new/in progress/closed), source, and data completeness; a manager gets a Telegram notification on every new lead and can take it into work right from the panel.
 - **Uptime monitoring** — an automated check every 10 minutes, with an email alert on downtime.
 
-The full roadmap (Instagram analytics, an AI agent for DMs and comments, lead intake and tracking, content publishing, the agency's own website) lives on the interactive roadmap site: **[roadmap-platform.example.com](https://roadmap-platform.example.com)**.
+The full roadmap (Instagram analytics, an AI agent for DMs and comments, lead intake and tracking, content publishing, the agency's own website) lives on the interactive roadmap site: **[chuck-uz/site-roadmap-](https://github.com/chuck-uz/site-roadmap-)**.
 
 ## Stack
 
@@ -43,7 +43,7 @@ The app comes up at `http://localhost:3001` (Postgres on `5433`).
 
 ## Production
 
-**[smm.example.com](https://smm.example.com)**
+The production address is set by the `NEXTAUTH_URL` environment variable (e.g. `https://smm.example.com`) and is not stored in the repository.
 
 ## For developers
 

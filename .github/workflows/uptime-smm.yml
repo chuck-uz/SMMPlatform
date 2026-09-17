@@ -1,4 +1,4 @@
-name: Uptime check — smm.example.com
+name: Uptime check
 
 on:
   schedule:
@@ -9,9 +9,15 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Check https://smm.example.com
+      - name: Check production URL
+        env:
+          SMM_URL: ${{ vars.SMM_URL }}
         run: |
-          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 https://smm.example.com/)
+          if [ -z "$SMM_URL" ]; then
+            echo "::notice::Repository variable SMM_URL is not set; skipping uptime check"
+            exit 0
+          fi
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$SMM_URL")
           echo "HTTP status: $code"
           if [ "$code" -lt 200 ] || [ "$code" -ge 400 ]; then
             echo "Site is down or returning an error (status $code)"
